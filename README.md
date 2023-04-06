@@ -26,7 +26,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Witness Run
-        uses: testifysec/witness-run-action@v1
+        uses: testifysec/witness-run-action@v0.1
         with:
           step: test
           use-archivista: true
