@@ -62,7 +62,7 @@ Please consult the documentation for Archivista and Sigstore on how to set up an
 | enable-sigstore             | Use Sigstore for attestation. Sets default values for fulcio, fulcio-oidc-client-id, fulcio-oidc-issuer, and timestamp-servers when true | No       | true |
 | enable-archivista        | Use Archivista to store or retrieve attestations                                                     | No       | true                                 | true |
 | archivista-server        | URL of the Archivista server to store or retrieve attestations                                      | No       | <https://archivista.testifysec.io>      |
-| attestations             | Attestations to record, space-separated                                                              | No       | environment git                       |
+| attestations             | Attestations to record, space-separated                                                              | No       | environment git github                      |
 | certificate              | Path to the signing key's certificate                                                                | No       |                                       |
 | fulcio                   | Fulcio address to sign with                                                                          | No       |                                       |
 | fulcio-oidc-client-id    | OIDC client ID to use for authentication                                                             | No       |                                       |
