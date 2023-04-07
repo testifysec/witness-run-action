@@ -27,6 +27,6 @@ jobs:
         uses: ./ # Replace this with the path to your action if different
         with:
           step: test
-          command: echo "hello" > test.txt
+          command: echo hello > hello.txt
           enable-sigstore: true
           enable-archivista: true
