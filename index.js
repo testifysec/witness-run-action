@@ -102,9 +102,14 @@ async function run() {
 
     const cmdJoined = cmd.join(" ");
     core.info("Running command: " + cmdJoined);
+    core.info("Running in directory " + process.env.GITHUB_WORKSPACE);
 
+    process.env.PATH = `${process.env.GITHUB_WORKSPACE}:${process.env.PATH}`;
+    
     // Change working directory to the root of the repo
     process.chdir(process.env.GITHUB_WORKSPACE);
+
+
 
     // Execute the command and capture its output
     let output = "";
