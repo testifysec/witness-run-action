@@ -31,7 +31,7 @@ jobs:
           step: test
           use-archivista: true
           use-sigstore: true
-          command: echo "hello" > test.txt
+          command: touch hello.txt
 ```
 
 ## Using Sigstore and Archivista Flags
