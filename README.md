@@ -45,7 +45,7 @@ Archivista is a server that stores and retrieves attestations. When the enable-a
 
 ### TimeStamping
 
-By default when using Sigstore, this action utilizes FreeTSA, a free and public Timestamp Authority (TSA) service, to provide trusted timestamping for your attestations. Timestamping is a critical aspect of creating non-repudiable and legally binding attestations. FreeTSA offers a reliable and convenient solution for timestamping without the need for setting up and managing your own TSA. When using this action, the timestamp-servers input is set to FreeTSA's service (https://freetsa.org/tsr) by default, ensuring your attestations are properly timestamped with a trusted and publicly verifiable source.
+By default when using Sigstore, this action utilizes FreeTSA, a free and public Timestamp Authority (TSA) service, to provide trusted timestamping for your attestations. Timestamping is a critical aspect of creating non-repudiable and legally binding attestations. FreeTSA offers a reliable and convenient solution for timestamping without the need for setting up and managing your own TSA. When using this action, the timestamp-servers input is set to FreeTSA's service (https://freetsa.org/) by default, ensuring your attestations are properly timestamped with a trusted and publicly verifiable source.
 
 ### Privacy Considerations
 If you want to keep the details of your attestations private, you can set up and host your own instances of Archivista and Sigstore. This allows you to manage access control and ensure that only authorized users can view the attestation details.
