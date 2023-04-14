@@ -1,6 +1,6 @@
 //index.js
 const core = require("@actions/core");
-const exec = require('@actions/exec');
+const exec = require("@actions/exec");
 const { exit } = require("process");
 const process = require("process");
 const fs = require("fs");
@@ -93,18 +93,18 @@ async function run() {
 
   process.env.PATH = `${__dirname}:${process.env.PATH}`;
   process.env.PATH = `${process.env.PATH}:/bin:/usr/bin`;
-  
+
   // Change working directory to the root of the repo
   process.chdir(process.env.GITHUB_WORKSPACE);
-  
+
   const commandArray = command.match(/(?:[^\s"]+|"[^"]*")+/g);
-  
+
   // Execute the command and capture its output
   const runArray = ["witness", ...cmd, "--", ...commandArray],
     commandString = runArray.join(" ");
-  
+
   let output = "";
-  await exec.exec('sh', ['-c', commandString], {
+  await exec.exec("sh", ["-c", commandString], {
     cwd: process.cwd(),
     env: process.env,
     listeners: {
@@ -117,14 +117,8 @@ async function run() {
     },
   });
 
-  // Find the Git OID using regex
-  const match = output.match(/[0-9a-fA-F]{64}/);
-  if (!match) {
-    console.error("Failed to extract Git OID from the output");
-    process.exit(1);
-  }
-
-  const gitOID = match[0];
+  // Find the Git OID from the output
+  const gitOID = extractDesiredGitOID(output);
   console.log("Extracted Git OID:", gitOID);
 
   // Print the Git OID to the output
@@ -162,6 +156,20 @@ async function run() {
   fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, tableRow);
 
   exit(0);
+}
+
+function extractDesiredGitOID(output) {
+  const lines = output.split("\n");
+  const desiredLinePrefix = "Stored in archivist as ";
+
+  for (const line of lines) {
+    if (line.startsWith(desiredLinePrefix)) {
+      const match = line.match(/[0-9a-fA-F]{64}/);
+      if (match) {
+        return match[0];
+      }
+    }
+  }
 }
 
 run();
