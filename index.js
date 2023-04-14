@@ -159,21 +159,15 @@ async function run() {
 }
 
 function extractDesiredGitOID(output) {
-  console.log("Output:", output);
-
   const lines = output.split("\n");
-  const desiredLinePrefix = "Stored in archivist as ";
+  const desiredSubstring = "Stored in archivist as ";
 
   for (const line of lines) {
-    console.log("Processing line:", line);
-    if (line.startsWith(desiredLinePrefix)) {
-      console.log("Found desired line:", line);
+    const startIndex = line.indexOf(desiredSubstring);
+    if (startIndex !== -1) {
       const match = line.match(/[0-9a-fA-F]{64}/);
       if (match) {
-        console.log("Matched Git OID:", match[0]);
         return match[0];
-      } else {
-        console.log("No Git OID match found in desired line");
       }
     }
   }
