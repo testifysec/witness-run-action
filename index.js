@@ -36,7 +36,7 @@ async function run() {
   const cmd = ["run"];
 
   if (enableSigstore) {
-    fulcio = fulcio || "https://v1.fulcio.sigstore.dev";
+    fulcio = fulcio || "https://fulcio.sigstore.dev";
     fulcioOidcClientId =
       fulcioOidcClientId || "https://oauth2.sigstore.dev/auth";
     fulcioOidcIssuer = fulcioOidcIssuer || "sigstore";
