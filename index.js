@@ -20,9 +20,7 @@ async function run() {
   const intermediates = core.getInput("intermediates").split(" ");
   const key = core.getInput("key");
   let outfile = core.getInput("outfile");
-  outfile = outfile
-    ? outfile
-    : path.join(os.tmpdir(), step + "-attestation.json");
+  outfile = outfile ? outfile : path.join(os.tmpdir(), step + "-attestation.json");
   const productExcludeGlob = core.getInput("product-exclude-glob");
   const productIncludeGlob = core.getInput("product-include-glob");
   const spiffeSocket = core.getInput("spiffe-socket");
@@ -37,10 +35,8 @@ async function run() {
 
   if (enableSigstore) {
     fulcio = fulcio || "https://fulcio.sigstore.dev";
-    fulcioOidcClientId =
-      fulcioOidcClientId || "https://oauth2.sigstore.dev/auth";
+    fulcioOidcClientId = fulcioOidcClientId || "https://oauth2.sigstore.dev/auth";
     fulcioOidcIssuer = fulcioOidcIssuer || "sigstore";
-    timestampServers = "https://freetsa.org/tsr " + timestampServers;
   }
 
   if (attestations.length) {
@@ -55,8 +51,7 @@ async function run() {
   if (certificate) cmd.push(`--certificate=${certificate}`);
   if (enableArchivista) cmd.push(`--enable-archivista=${enableArchivista}`);
   if (fulcio) cmd.push(`--fulcio=${fulcio}`);
-  if (fulcioOidcClientId)
-    cmd.push(`--fulcio-oidc-client-id=${fulcioOidcClientId}`);
+  if (fulcioOidcClientId) cmd.push(`--fulcio-oidc-client-id=${fulcioOidcClientId}`);
   if (fulcioOidcIssuer) cmd.push(`--fulcio-oidc-issuer=${fulcioOidcIssuer}`);
   if (fulcioToken) cmd.push(`--fulcio-token=${fulcioToken}`);
 
@@ -70,10 +65,8 @@ async function run() {
   }
 
   if (key) cmd.push(`--key=${key}`);
-  if (productExcludeGlob)
-    cmd.push(`--product-excludeGlob=${productExcludeGlob}`);
-  if (productIncludeGlob)
-    cmd.push(`--product-includeGlob=${productIncludeGlob}`);
+  if (productExcludeGlob) cmd.push(`--product-excludeGlob=${productExcludeGlob}`);
+  if (productIncludeGlob) cmd.push(`--product-includeGlob=${productIncludeGlob}`);
   if (spiffeSocket) cmd.push(`--spiffe-socket=${spiffeSocket}`);
   if (step) cmd.push(`-s=${step}`);
 
@@ -148,9 +141,7 @@ async function run() {
   }
 
   // Construct the table row for the current step
-  const tableRow = `| ${step} | ${attestations.join(
-    ", "
-  )} | [${gitOID}](${artifactURL}) |\n`;
+  const tableRow = `| ${step} | ${attestations.join(", ")} | [${gitOID}](${artifactURL}) |\n`;
 
   // Append the table row to the file
   fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, tableRow);
