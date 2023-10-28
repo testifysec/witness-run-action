@@ -6,7 +6,108 @@ const process = require("process");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const axios = require('axios');
+const crypto = require('crypto');
+const tar = require('tar');
+/**
+ * This function downloads and verifies the latest version of Witness.
+ * It determines the architecture of the system and the OS, constructs the filename and download URL,
+ * gets the expected checksum, downloads the binary, calculates the actual checksum,
+ * compares the actual checksum with the expected one, saves the binary to a file in the root directory,
+ * extracts the tar.gz file and deletes the tar.gz file.
+ * @throws {Error} If the architecture is unsupported or the SHA-256 checksums do not match.
+ */
 
+async function downloadAndVerifyWitness() {
+  // Get the latest version of Witness
+  const { data } = await axios.get('https://api.github.com/repos/testifysec/witness/releases/latest');
+  const version = data.tag_name.slice(1); // Remove 'v' prefix
+
+  // Determine the architecture of the system
+  let arch = os.arch();
+  if (arch === 'x64') {
+    arch = 'amd64';
+  } else if (arch === 'arm64') {
+    arch = 'arm64';
+  } else {
+    throw new Error('Unsupported architecture');
+  }
+
+  // Determine the OS
+  const osType = os.type().toLowerCase();
+
+  // Construct the filename and download URL
+  const filename = `witness_${version}_${osType}_${arch}.tar.gz`;
+  const downloadUrl = `https://github.com/testifysec/witness/releases/download/v${version}/${filename}`;
+
+  console.log(`Downloading ${filename} from ${downloadUrl}`);
+  // Get the expected checksum
+  const checksumsResponse = await axios.get(`https://github.com/testifysec/witness/releases/download/v${version}/witness_${version}_checksums.txt`);
+  const checksums = checksumsResponse.data.split('\n');
+  const expectedChecksum = checksums.find(line => line.includes(filename)).split(' ')[0];
+
+  // Download the binary
+  const { data: binary } = await axios.get(downloadUrl, { responseType: 'arraybuffer' });
+
+  // Calculate the actual checksum
+  const hash = crypto.createHash('sha256');
+  hash.update(binary);
+  const actualChecksum = hash.digest('hex');
+
+  // Compare the actual checksum with the expected one
+  if (actualChecksum !== expectedChecksum) {
+    throw new Error('SHA-256 checksums do not match');
+  }
+
+  // Save the binary to a file in the root directory
+  const filePath = path.join(process.env.GITHUB_WORKSPACE, 'witness.tar.gz');
+  await fs.promises.writeFile(filePath, binary);
+
+  console.log('Extracting binary');
+  // Extract the tar.gz file
+  await tar.x({ file: filePath, C: process.env.GITHUB_WORKSPACE });
+
+  // Delete the tar.gz file
+  await fs.promises.unlink(filePath);
+
+  // Add the directory of the binary to the system's PATH
+  process.env.PATH = `${path.dirname(filePath)}:${process.env.PATH}`;
+
+  // Set the permissions of the file to 755
+  const extractedFilePath = path.join(process.env.GITHUB_WORKSPACE, 'witness');
+  console.log(`Setting permissions of ${extractedFilePath} to 755`);
+  await fs.promises.chmod(extractedFilePath, '755');
+  // Exec the witness with a `witness version` and print the output
+  console.log('Executing witness version');
+  let output = '';
+  const options = {
+    listeners: {
+      stdout: (data) => {
+        output += data.toString();
+      },
+    },
+  };
+  await exec.exec('witness version', [], options);
+  console.log(output);
+}
+/**
+ * This function is used to install the dependencies required for the project.
+ * It uses the 'npm ci' command to install the dependencies.
+ * If there is an error during the installation, it will be caught and the error message will be set as the failure message.
+ */
+
+async function installDependencies() {
+  try {
+    await exec.exec('npm ci');
+  } catch (error) {
+    core.setFailed(error.message);
+  }
+}
+module.exports = {
+  run,
+  installDependencies,
+  downloadAndVerifyWitness
+};
 async function run() {
   const step = core.getInput("step");
   const archivistaServer = core.getInput("archivista-server");
@@ -172,5 +273,7 @@ function extractDesiredGitOID(output) {
     }
   }
 }
-
-run();
+// This is to avoid running the code in the test environment
+if (process.env.NODE_ENV !== 'test') {
+  run();
+}
