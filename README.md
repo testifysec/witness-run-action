@@ -30,10 +30,10 @@ jobs:
       - name: Witness Run
         uses: testifysec/witness-run-action@v0.1
         with:
-          step: test
+          step: build
           enable-archivista: true
           enable-sigstore: true
-          command: touch hello.txt
+          command: make build
 ```
 
 ## Using Sigstore and Archivista Flags
