@@ -29,8 +29,8 @@ jobs:
         uses: testifysec/witness-run-action@v0.1
         with:
           step: test
-          use-archivista: true
-          use-sigstore: true
+          enable-archivista: true
+          enable-sigstore: true
           command: touch hello.txt
 ```
 
@@ -38,7 +38,7 @@ jobs:
 This action supports the use of Sigstore and Archivista for creating attestations. By enabling these options, you create a public record of your attestations, which can be useful for transparency and compliance.
 
 ### Sigstore
-Sigstore is an open-source platform for securely signing software artifacts. When the use-sigstore flag is set to true, this action will use Sigstore for signing the attestation. This creates a publicly verifiable record of the attestation on the Sigstore public instance, sigstore.dev
+Sigstore is an open-source platform for securely signing software artifacts. When the enable-sigstore flag is set to true, this action will use Sigstore for signing the attestation. This creates a publicly verifiable record of the attestation on the Sigstore public instance, sigstore.dev
 
 ### Archivista
 Archivista is a server that stores and retrieves attestations. When the enable-archivista flag is set to true, this action will use Archivista for storing and retrieving attestations. By default, the attestations are stored on a public Archivista server, archivista.testifysec.io, making the details publicly accessible.  This server also has no guarantees on data availability or itegrity.
