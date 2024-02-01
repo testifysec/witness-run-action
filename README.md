@@ -25,14 +25,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v0.1.3
 
       - name: Witness Run
-        uses: testifysec/witness-run-action@v0.1
+        uses: testifysec/witness-run-action@v1
         with:
           step: build
-          enable-archivista: true
-          enable-sigstore: true
+          enable-archivista: false
+          enable-sigstore: false
           command: make build
 ```
 
