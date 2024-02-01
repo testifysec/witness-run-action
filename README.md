@@ -41,7 +41,7 @@ This action supports the use of Sigstore and Archivista for creating attestation
 Sigstore is an open-source platform for securely signing software artifacts. When the enable-sigstore flag is set to true, this action will use Sigstore for signing the attestation. This creates a publicly verifiable record of the attestation on the Sigstore public instance, sigstore.dev
 
 ### Archivista
-Archivista is a server that stores and retrieves attestations. When the enable-archivista flag is set to true, this action will use Archivista for storing and retrieving attestations. By default, the attestations are stored on a public Archivista server, archivista.testifysec.io, making the details publicly accessible.  This server also has no guarantees on data availability or itegrity.
+Archivista is a server that stores and retrieves attestations. When the enable-archivista flag is set to true, this action will use Archivista for storing and retrieving attestations. By default, the attestations are stored on a public Archivista server, archivista.testifysec.io, making the details publicly accessible.  This server also has no guarantees on data availability or integrity.
 
 ### TimeStamping
 
