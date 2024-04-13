@@ -30507,10 +30507,13 @@ async function run() {
      witnessTar = await tc.downloadTool('https://github.com/in-toto/witness/releases/download/v' + version + '/witness_' + version + '_linux_amd64.tar.gz');
     }
 
-    await tc.extractTar(witnessTar, witnessExtractPath);
-    await tc.cacheFile(witnessPath + 'witness', 'witness', 'witness', version);
-
+    witnessPath = await tc.extractTar(witnessTar, witnessExtractPath);
+    const cachedPath = await tc.cacheFile(witnessPath + 'witness', 'witness', 'witness', version);
+    console.log('Witness cached at: ' + cachedPath);
+    os.execSync('ls -la');
   }
+
+  core.addPath(witnessPath);
 
   const step = core.getInput("step");
   const archivistaServer = core.getInput("archivista-server");
