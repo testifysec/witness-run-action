@@ -22,3 +22,4 @@ jobs:
           command: echo hello > hello.txt
           enable-sigstore: true
           enable-archivista: true
+          attestations: environment git github slsa
