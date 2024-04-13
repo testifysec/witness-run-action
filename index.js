@@ -15,7 +15,6 @@ async function run() {
 
   let witnessPath = tc.find('witness', version);
   console.log('Cached Witness Path: ' + witnessPath);
-  core.addPath(witnessPath);
   console.log('Witness Directory: ' + witnessPath);
 
   if (!witnessPath) {
@@ -31,8 +30,8 @@ async function run() {
      witnessTar = await tc.downloadTool('https://github.com/in-toto/witness/releases/download/v' + version + '/witness_' + version + '_linux_amd64.tar.gz');
     }
 
-    witnessPath = await tc.extractTar(witnessTar, witnessExtractPath);
-    const cachedPath = await tc.cacheFile(witnessPath + 'witness', 'witness', 'witness', version);
+    await tc.extractTar(witnessTar, witnessExtractPath);
+    await tc.cacheFile(witnessPath + 'witness', 'witness', 'witness', version);
 
   }
 
@@ -128,7 +127,7 @@ async function run() {
   const commandArray = command.match(/(?:[^\s"]+|"[^"]*")+/g);
 
   // Execute the command and capture its output
-  const runArray = [witnessPath, ...cmd, "--", ...commandArray],
+  const runArray = ['witness', ...cmd, "--", ...commandArray],
     commandString = runArray.join(" ");
 
   let output = "";
