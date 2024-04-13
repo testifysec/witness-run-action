@@ -30490,7 +30490,7 @@ async function run() {
   const version = core.getInput("version");
   const witnessExtractPath = './'
 
-  const witnessPath = tc.find('witness', version);
+  let witnessPath = tc.find('witness', version);
   console.log('Cached Witness Path: ' + witnessPath);
   core.addPath(witnessPath);
   console.log('Witness Directory: ' + witnessPath);
