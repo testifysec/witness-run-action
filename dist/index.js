@@ -30497,15 +30497,15 @@ async function run() {
 
   if (!witnessPath) {
     console.log('Witness not found in cache, downloading now');
-    
+    let witnessTar
     if (process.platform === 'win32') {
-      const witnessTar = await tc.downloadTool('https://github.com/in-toto/witness/releases/download/v' + version + '/witness_' + version + '_windows_amd64.tar.gz');
+      witnessTar = await tc.downloadTool('https://github.com/in-toto/witness/releases/download/v' + version + '/witness_' + version + '_windows_amd64.tar.gz');
     }
     else if (process.platform === 'darwin') {
-      const witnessTar = await tc.downloadTool('https://github.com/in-toto/witness/releases/download/v' + version + '/witness_' + version + '_darwin_amd64.tar.gz');
+     witnessTar = await tc.downloadTool('https://github.com/in-toto/witness/releases/download/v' + version + '/witness_' + version + '_darwin_amd64.tar.gz');
     }
     else {
-      const witnessTar = await tc.downloadTool('https://github.com/in-toto/witness/releases/download/v' + version + '/witness_' + version + '_linux_amd64.tar.gz');
+     witnessTar = await tc.downloadTool('https://github.com/in-toto/witness/releases/download/v' + version + '/witness_' + version + '_linux_amd64.tar.gz');
     }
 
     witnessPath = await tc.extractTar(witnessTar, witnessExtractPath);
