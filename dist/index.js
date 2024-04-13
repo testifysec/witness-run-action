@@ -2325,7 +2325,7 @@ class HttpClient {
         if (this._keepAlive && useProxy) {
             agent = this._proxyAgent;
         }
-        if (this._keepAlive && !useProxy) {
+        if (!useProxy) {
             agent = this._agent;
         }
         // if agent is already assigned use that agent.
@@ -2357,15 +2357,11 @@ class HttpClient {
             agent = tunnelAgent(agentOptions);
             this._proxyAgent = agent;
         }
-        // if reusing agent across request and tunneling agent isn't assigned create a new agent
-        if (this._keepAlive && !agent) {
+        // if tunneling agent isn't assigned create a new agent
+        if (!agent) {
             const options = { keepAlive: this._keepAlive, maxSockets };
             agent = usingSsl ? new https.Agent(options) : new http.Agent(options);
             this._agent = agent;
-        }
-        // if not using private agent and tunnel agent isn't setup then use global agent
-        if (!agent) {
-            agent = usingSsl ? https.globalAgent : http.globalAgent;
         }
         if (usingSsl && this._ignoreSslError) {
             // we don't want to set NODE_TLS_REJECT_UNAUTHORIZED=0 since that will affect request for entire process
@@ -30527,9 +30523,6 @@ async function run() {
   const intermediates = core.getInput("intermediates").split(" ");
   const key = core.getInput("key");
   let outfile = core.getInput("outfile");
-  outfile = outfile
-    ? outfile
-    : path.join(os.tmpdir(), step + "-attestation.json");
   const productExcludeGlob = core.getInput("product-exclude-glob");
   const productIncludeGlob = core.getInput("product-include-glob");
   const spiffeSocket = core.getInput("spiffe-socket");
@@ -30595,7 +30588,8 @@ async function run() {
   }
 
   if (trace) cmd.push(`--trace=${trace}`);
-  cmd.push(`--outfile=${outfile}`);
+  if (outfile)
+    cmd.push(`--outfile=${outfile}`);
   core.info("Running in directory " + process.env.GITHUB_WORKSPACE);
 
   process.env.PATH = `${__dirname}:${process.env.PATH}`;
