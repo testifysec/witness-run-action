@@ -192,11 +192,14 @@ function extractDesiredGitOID(output) {
   const lines = output.split("\n");
   const desiredSubstring = "Stored in archivist as ";
 
+  console.log("Looking for Git OID in the output")
   for (const line of lines) {
     const startIndex = line.indexOf(desiredSubstring);
     if (startIndex !== -1) {
+      console.log("Checking line: ", line)
       const match = line.match(/[0-9a-fA-F]{64}/);
       if (match) {
+        console.log("Found Git OID: ", match[0])
         return match[0];
       }
     }
