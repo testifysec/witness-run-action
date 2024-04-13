@@ -6,8 +6,38 @@ const process = require("process");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const tc = require('@actions/tool-cache');
 
 async function run() {
+  // Download Witness
+  const version = core.getInput("version");
+  const witnessExtractPath = '/witness/'
+
+  const witnessPath = tc.find('witness', version);
+  console.log('Cached Witness Path: ' + witnessPath);
+  core.addPath(witnessPath);
+  console.log('Witness Directory: ' + witnessPath);
+
+  if (!witnessPath) {
+    console.log('Witness not found in cache, downloading now');
+    
+    if (process.platform === 'win32') {
+      const witnessTar = await tc.downloadTool('https://github.com/in-toto/witness/releases/download/v' + version + '/witness_' + version + '_windows_amd64.tar.gz"');
+      witnessPath = await tc.extractZip(witnessPath, witnessExtractPath);
+    }
+    else if (process.platform === 'darwin') {
+      const witnessTar = await tc.downloadTool('https://github.com/in-toto/witness/releases/download/v' + version + '/witness_' + version + '_darwin_amd64.tar.gz"');
+      witnessPath = await tc.extractXar(witnessPath, witnessExtractPath);
+    }
+    else {
+      const witnessTar = await tc.downloadTool('https://github.com/in-toto/witness/releases/download/v' + version + '/witness_' + version + '_linux_amd64.tar.gz"');
+      witnessPath = await tc.extractTar(witnessPath, witnessExtractPath);
+    }
+
+    const cachedPath = await tc.cacheFile(witnessPath + 'witness', 'witness', 'witness', version);
+
+  }
+
   const step = core.getInput("step");
   const archivistaServer = core.getInput("archivista-server");
   const attestations = core.getInput("attestations").split(" ");
@@ -100,7 +130,7 @@ async function run() {
   const commandArray = command.match(/(?:[^\s"]+|"[^"]*")+/g);
 
   // Execute the command and capture its output
-  const runArray = ["witness", ...cmd, "--", ...commandArray],
+  const runArray = [witnessPath, ...cmd, "--", ...commandArray],
     commandString = runArray.join(" ");
 
   let output = "";
