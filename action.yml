@@ -63,6 +63,10 @@ inputs:
     description: "Enable tracing for the command"
     required: false
     default: "false"
+  version:
+    description: "Version of Witness CLI"
+    required: false
+    default: "0.4.0-beta"
   workingdir:
     description: "Directory from which commands will run"
     required: false
