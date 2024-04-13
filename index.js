@@ -50,9 +50,6 @@ async function run() {
   const intermediates = core.getInput("intermediates").split(" ");
   const key = core.getInput("key");
   let outfile = core.getInput("outfile");
-  outfile = outfile
-    ? outfile
-    : path.join(os.tmpdir(), step + "-attestation.json");
   const productExcludeGlob = core.getInput("product-exclude-glob");
   const productIncludeGlob = core.getInput("product-include-glob");
   const spiffeSocket = core.getInput("spiffe-socket");
@@ -118,7 +115,8 @@ async function run() {
   }
 
   if (trace) cmd.push(`--trace=${trace}`);
-  cmd.push(`--outfile=${outfile}`);
+  if (outfile)
+    cmd.push(`--outfile=${outfile}`);
   core.info("Running in directory " + process.env.GITHUB_WORKSPACE);
 
   process.env.PATH = `${__dirname}:${process.env.PATH}`;
