@@ -30667,7 +30667,7 @@ async function run() {
 
 function extractDesiredGitOID(output) {
   const lines = output.split("\n");
-  const desiredSubstring = "Stored in archivist as ";
+  const desiredSubstring = "Stored in archivista as ";
 
   console.log("Looking for Git OID in the output")
   for (const line of lines) {
