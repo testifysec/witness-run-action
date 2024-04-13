@@ -68,8 +68,8 @@ async function run() {
   if (enableSigstore) {
     fulcio = fulcio || "https://fulcio.sigstore.dev";
     fulcioOidcClientId =
-      fulcioOidcClientId || "https://oauth2.sigstore.dev/auth";
-    fulcioOidcIssuer = fulcioOidcIssuer || "sigstore";
+      fulcioOidcClientId || "sigstore";
+    fulcioOidcIssuer = fulcioOidcIssuer || "https://oauth2.sigstore.dev/auth";
     timestampServers = "https://freetsa.org/tsr " + timestampServers;
   }
 
@@ -84,11 +84,11 @@ async function run() {
 
   if (certificate) cmd.push(`--certificate=${certificate}`);
   if (enableArchivista) cmd.push(`--enable-archivista=${enableArchivista}`);
-  if (fulcio) cmd.push(`--fulcio=${fulcio}`);
+  if (fulcio) cmd.push(`--signer-fulcio-url=${fulcio}`);
   if (fulcioOidcClientId)
-    cmd.push(`--fulcio-oidc-client-id=${fulcioOidcClientId}`);
-  if (fulcioOidcIssuer) cmd.push(`--fulcio-oidc-issuer=${fulcioOidcIssuer}`);
-  if (fulcioToken) cmd.push(`--fulcio-token=${fulcioToken}`);
+    cmd.push(`--signer-fulcio-oidc-client-id=${fulcioOidcClientId}`);
+  if (fulcioOidcIssuer) cmd.push(`--signer-fulcio-oidc-issuer=${fulcioOidcIssuer}`);
+  if (fulcioToken) cmd.push(`--signer-fulcio-token=${fulcioToken}`);
 
   if (intermediates.length) {
     intermediates.forEach((intermediate) => {
