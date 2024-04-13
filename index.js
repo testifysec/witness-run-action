@@ -33,10 +33,10 @@ async function run() {
     witnessPath = await tc.extractTar(witnessTar, witnessExtractPath);
     const cachedPath = await tc.cacheFile(witnessPath + 'witness', 'witness', 'witness', version);
     console.log('Witness cached at: ' + cachedPath);
-    os.execSync('ls -la');
   }
 
   core.addPath(witnessPath);
+  await exec.exec('ls', '-la')
 
   const step = core.getInput("step");
   const archivistaServer = core.getInput("archivista-server");
