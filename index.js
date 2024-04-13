@@ -11,7 +11,7 @@ const tc = require('@actions/tool-cache');
 async function run() {
   // Download Witness
   const version = core.getInput("version");
-  const witnessExtractPath = '/witness/'
+  const witnessExtractPath = './'
 
   const witnessPath = tc.find('witness', version);
   console.log('Cached Witness Path: ' + witnessPath);
