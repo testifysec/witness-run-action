@@ -146,50 +146,53 @@ async function run() {
   });
 
   // Find the Git OID from the output
-  const gitOID = extractDesiredGitOID(output);
-  console.log("Extracted Git OID:", gitOID);
+  const gitOIDs = extractDesiredGitOIDs(output);
 
-  // Print the Git OID to the output
-  core.setOutput("git_oid", gitOID);
+  for (const gitOID of gitOIDs) {
+    console.log("Extracted Git OID:", gitOID);
 
-  // Construct the artifact URL using Archivista server and Git OID
-  const artifactURL = `${archivistaServer}/download/${gitOID}`;
+    // Print the Git OID to the output
+    core.setOutput("git_oid", gitOID);
 
-  // Add Job Summary with Markdown content
-  const summaryHeader = `
-## Attestations Created
-| Step | Attestors Run | Attentation OID
-| --- | --- | --- |
-`;
+    // Construct the artifact URL using Archivista server and Git OID
+    const artifactURL = `${archivistaServer}/download/${gitOID}`;
 
-  // Read the contents of the file
-  const summaryFile = fs.readFileSync(process.env.GITHUB_STEP_SUMMARY, {
-    encoding: "utf-8",
-  });
+    // Add Job Summary with Markdown content
+    const summaryHeader = `
+  ## Attestations Created
+  | Step | Attestors Run | Attentation OID
+  | --- | --- | --- |
+  `;
 
-  // Check if the file contains the header
-  const headerExists = summaryFile.includes(summaryHeader.trim());
+    // Read the contents of the file
+    const summaryFile = fs.readFileSync(process.env.GITHUB_STEP_SUMMARY, {
+      encoding: "utf-8",
+    });
 
-  // If the header does not exist, append it to the file
-  if (!headerExists) {
-    fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summaryHeader);
+    // Check if the file contains the header
+    const headerExists = summaryFile.includes(summaryHeader.trim());
+
+    // If the header does not exist, append it to the file
+    if (!headerExists) {
+      fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summaryHeader);
+    }
+
+    // Construct the table row for the current step
+    const tableRow = `| ${step} | ${attestations.join(
+      ", "
+    )} | [${gitOID}](${artifactURL}) |\n`;
+
+    // Append the table row to the file
+    fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, tableRow);
   }
-
-  // Construct the table row for the current step
-  const tableRow = `| ${step} | ${attestations.join(
-    ", "
-  )} | [${gitOID}](${artifactURL}) |\n`;
-
-  // Append the table row to the file
-  fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, tableRow);
-
   exit(0);
 }
 
-function extractDesiredGitOID(output) {
+function extractDesiredGitOIDs(output) {
   const lines = output.split("\n");
   const desiredSubstring = "Stored in archivista as ";
 
+  const matchArray = [];
   console.log("Looking for Git OID in the output")
   for (const line of lines) {
     const startIndex = line.indexOf(desiredSubstring);
@@ -198,10 +201,12 @@ function extractDesiredGitOID(output) {
       const match = line.match(/[0-9a-fA-F]{64}/);
       if (match) {
         console.log("Found Git OID: ", match[0])
-        return match[0];
+        matchArray.push(match[0]);
       }
     }
   }
+
+  return matchArray;
 }
 
 run();
