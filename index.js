@@ -60,6 +60,11 @@ async function run() {
   const enableSigstore = core.getInput("enable-sigstore") === "true";
   const command = core.getInput("command");
 
+  const exportLink = core.getInput("attestor-link-export") === "true";
+  const exportSBOM = core.getInput("attestor-sbom-export") === "true";
+  const exportSLSA = core.getInput("attestor-slsa-export") === "true";
+  const mavenPOM = core.getInput("attestor-maven-pom-path");
+
   const cmd = ["run"];
 
   if (enableSigstore) {
@@ -78,6 +83,12 @@ async function run() {
       }
     });
   }
+
+  if (exportLink) cmd.push(`--attestor-link-export`);
+  if (exportSBOM) cmd.push(`--attestor-sbom-export`);
+  if (exportSLSA) cmd.push(`--attestor-slsa-export`);
+
+  if (mavenPOM) cmd.push(`--attestor-maven-pom-path=${mavenPOM}`);
 
   if (certificate) cmd.push(`--certificate=${certificate}`);
   if (enableArchivista) cmd.push(`--enable-archivista=${enableArchivista}`);
@@ -145,22 +156,22 @@ async function run() {
     },
   });
 
-  // Find the Git OID from the output
+  // Find the GitOID from the output
   const gitOIDs = extractDesiredGitOIDs(output);
 
   for (const gitOID of gitOIDs) {
-    console.log("Extracted Git OID:", gitOID);
+    console.log("Extracted GitOID:", gitOID);
 
-    // Print the Git OID to the output
+    // Print the GitOID to the output
     core.setOutput("git_oid", gitOID);
 
-    // Construct the artifact URL using Archivista server and Git OID
+    // Construct the artifact URL using Archivista server and GitOID
     const artifactURL = `${archivistaServer}/download/${gitOID}`;
 
     // Add Job Summary with Markdown content
     const summaryHeader = `
   ## Attestations Created
-  | Step | Attestors Run | Attentation OID
+  | Step | Attestors Run | Attestation GitOID
   | --- | --- | --- |
   `;
 
@@ -193,14 +204,14 @@ function extractDesiredGitOIDs(output) {
   const desiredSubstring = "Stored in archivista as ";
 
   const matchArray = [];
-  console.log("Looking for Git OID in the output")
+  console.log("Looking for GitOID in the output")
   for (const line of lines) {
     const startIndex = line.indexOf(desiredSubstring);
     if (startIndex !== -1) {
       console.log("Checking line: ", line)
       const match = line.match(/[0-9a-fA-F]{64}/);
       if (match) {
-        console.log("Found Git OID: ", match[0])
+        console.log("Found GitOID: ", match[0])
         matchArray.push(match[0]);
       }
     }

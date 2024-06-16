@@ -9,6 +9,21 @@ inputs:
     description: "Attestations to record"
     required: false
     default: "environment git github"
+  attestor-link-export:
+    description: "Export the attestor link predicate in its own attestation"
+    required: false
+    default: "false"
+  attestor-maven-pom-path:
+    description: "Path to the Maven POM file"
+    required: false
+  attestor-sbom-export:
+    description: "Export the SBOM predicate in its own attestation"
+    required: false
+    default: "false"
+  attestor-slsa-export:
+    description: "Export the SLSA predicate in its own attestation"
+    required: false
+    default: "false"
   enable-sigstore:
     description: 'Use Sigstore for attestation'
     required: false
@@ -66,7 +81,7 @@ inputs:
   version:
     description: "Version of Witness CLI"
     required: false
-    default: "0.4.0-beta"
+    default: "0.5.2"
   workingdir:
     description: "Directory from which commands will run"
     required: false
