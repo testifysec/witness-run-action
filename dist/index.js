@@ -30509,7 +30509,6 @@ async function run() {
   }
 
   core.addPath(witnessPath);
-  await exec.exec('ls', '-la')
 
   const step = core.getInput("step");
   const archivistaServer = core.getInput("archivista-server");
@@ -30523,6 +30522,9 @@ async function run() {
   const intermediates = core.getInput("intermediates").split(" ");
   const key = core.getInput("key");
   let outfile = core.getInput("outfile");
+  outfile = outfile
+    ? outfile
+    : path.join(os.tmpdir(), step + "-attestation.json");
   const productExcludeGlob = core.getInput("product-exclude-glob");
   const productIncludeGlob = core.getInput("product-include-glob");
   const spiffeSocket = core.getInput("spiffe-socket");
@@ -30565,6 +30567,7 @@ async function run() {
 
   if (certificate) cmd.push(`--certificate=${certificate}`);
   if (enableArchivista) cmd.push(`--enable-archivista=${enableArchivista}`);
+  if (archivistaServer) cmd.push(`--archivista-server=${archivistaServer}`);
   if (fulcio) cmd.push(`--signer-fulcio-url=${fulcio}`);
   if (fulcioOidcClientId)
     cmd.push(`--signer-fulcio-oidc-client-id=${fulcioOidcClientId}`);
