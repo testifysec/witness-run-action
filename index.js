@@ -9,9 +9,9 @@ const path = require("path");
 const tc = require('@actions/tool-cache');
 
 async function run() {
+  const witnessInstallDir = core.getInput('witness-install-dir') || './';
   // Download Witness
   const version = core.getInput("version");
-  const witnessExtractPath = './'
 
   let witnessPath = tc.find('witness', version);
   console.log('Cached Witness Path: ' + witnessPath);
@@ -30,7 +30,11 @@ async function run() {
      witnessTar = await tc.downloadTool('https://github.com/in-toto/witness/releases/download/v' + version + '/witness_' + version + '_linux_amd64.tar.gz');
     }
 
-    witnessPath = await tc.extractTar(witnessTar, witnessExtractPath);
+    if (!fs.existsSync(witnessInstallDir)) {
+      fs.mkdirSync(witnessInstallDir, { recursive: true });
+    }
+
+    witnessPath = await tc.extractTar(witnessTar, witnessInstallDir);
     const cachedPath = await tc.cacheFile(witnessPath + 'witness', 'witness', 'witness', version);
     console.log('Witness cached at: ' + cachedPath);
   }
