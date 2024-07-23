@@ -30746,7 +30746,12 @@ async function run() {
 
     console.log("Extracting witness at: " + witnessInstallDir);
     witnessPath = await tc.extractTar(witnessTar, witnessInstallDir);
-    const cachedPath = await tc.cacheFile(witnessPath + "witness", "witness", "witness", version);
+    const cachedPath = await tc.cacheFile(
+      path.join(witnessPath, "witness"),
+      "witness",
+      "witness",
+      version
+    );
     console.log("Witness cached at: " + cachedPath);
   }
 
