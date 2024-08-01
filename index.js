@@ -134,8 +134,8 @@ async function run() {
   }
 
   if (key) cmd.push(`--key=${key}`);
-  if (productExcludeGlob) cmd.push(`--product-excludeGlob=${productExcludeGlob}`);
-  if (productIncludeGlob) cmd.push(`--product-includeGlob=${productIncludeGlob}`);
+  if (productExcludeGlob) cmd.push(`--attestor-product-exclude-glob=${productExcludeGlob}`);
+  if (productIncludeGlob) cmd.push(`--attestor-product-include-glob=${productIncludeGlob}`);
   if (spiffeSocket) cmd.push(`--spiffe-socket=${spiffeSocket}`);
   if (step) cmd.push(`-s=${step}`);
 
