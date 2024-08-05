@@ -85,7 +85,7 @@ inputs:
   version:
     description: "Version of Witness CLI"
     required: false
-    default: "0.5.2"
+    default: "0.6.0"
   workingdir:
     description: "Directory from which commands will run"
     required: false
