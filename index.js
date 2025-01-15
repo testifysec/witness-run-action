@@ -119,7 +119,7 @@ async function run() {
 
   if (mavenPOM) cmd.push(`--attestor-maven-pom-path=${mavenPOM}`);
 
-  if (certificate) cmd.push(`--certificate=${certificate}`);
+  if (certificate) cmd.push(`--signer-file-cert-path=${certificate}`);
   if (enableArchivista) cmd.push(`--enable-archivista=${enableArchivista}`);
   if (archivistaServer) cmd.push(`--archivista-server=${archivistaServer}`);
   if (fulcio) cmd.push(`--signer-fulcio-url=${fulcio}`);
@@ -136,7 +136,7 @@ async function run() {
     });
   }
 
-  if (key) cmd.push(`--key=${key}`);
+  if (key) cmd.push(`--signer-file-key-path=${key}`);
   if (productExcludeGlob) cmd.push(`--attestor-product-exclude-glob=${productExcludeGlob}`);
   if (productIncludeGlob) cmd.push(`--attestor-product-include-glob=${productIncludeGlob}`);
   if (spiffeSocket) cmd.push(`--spiffe-socket=${spiffeSocket}`);
