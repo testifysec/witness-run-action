@@ -67,7 +67,7 @@ jobs:
           path: /tmp
 
       - if: ${{ inputs.pre-command != '' && inputs.pull_request == false }}
-        uses: testifysec/witness-run-action@c3d908905ee440a774ee467c81395e8bfa721fe1
+        uses: testifysec/witness-run-action@d5390fbc672f38705ca5fe57c219abd0471cfa2d
         with:
           version: 0.6.0
           archivista-server: ${{ inputs.archivista-server }}
@@ -80,7 +80,7 @@ jobs:
         working-directory: ${{ inputs.workingdir }}
 
       - if: ${{ inputs.pull_request == false }}
-        uses: testifysec/witness-run-action@c3d908905ee440a774ee467c81395e8bfa721fe1
+        uses: testifysec/witness-run-action@d5390fbc672f38705ca5fe57c219abd0471cfa2d
         with:
           version: 0.6.0
           archivista-server: ${{ inputs.archivista-server }}
