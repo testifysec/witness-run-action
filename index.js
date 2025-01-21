@@ -1,107 +1,89 @@
 //index.js
-const core = require("@actions/core");
-const exec = require("@actions/exec");
-const { exit } = require("process");
-const process = require("process");
-const fs = require("fs");
-const os = require("os");
-const path = require("path");
-const tc = require("@actions/tool-cache");
+const core = require('@actions/core');
+const exec = require('@actions/exec');
+const { exit } = require('process');
+const process = require('process');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const tc = require('@actions/tool-cache');
 
 async function run() {
-  const witnessInstallDir = core.getInput("witness-install-dir") || "./";
+  const workingdir = core.getInput('workingdir');
+  const fullWorkspacePath = path.join(process.env.GITHUB_WORKSPACE, workingdir);
+  const witnessInstallDir = core.getInput('witness-install-dir') || fullWorkspacePath;
   // Download Witness
-  const version = core.getInput("version");
+  const version = core.getInput('version');
 
-  let witnessPath = tc.find("witness", version);
-  console.log("Cached Witness Path: " + witnessPath);
-  console.log("Witness Directory: " + witnessPath);
-  console.log("Witness install directory: " + witnessInstallDir);
+  let witnessPath = tc.find('witness', version);
+  console.log('Cached Witness Path: ' + witnessPath);
+  console.log('Witness Directory: ' + witnessPath);
+  console.log('Witness install directory: ' + witnessInstallDir);
 
   if (!witnessPath) {
-    console.log("Witness not found in cache, downloading now");
+    console.log('Witness not found in cache, downloading now');
     let witnessTar;
-    if (process.platform === "win32") {
+    if (process.platform === 'win32') {
       witnessTar = await tc.downloadTool(
-        "https://github.com/in-toto/witness/releases/download/v" +
-          version +
-          "/witness_" +
-          version +
-          "_windows_amd64.tar.gz"
+        'https://github.com/in-toto/witness/releases/download/v' + version + '/witness_' + version + '_windows_amd64.tar.gz'
       );
-    } else if (process.platform === "darwin") {
+    } else if (process.platform === 'darwin') {
       witnessTar = await tc.downloadTool(
-        "https://github.com/in-toto/witness/releases/download/v" +
-          version +
-          "/witness_" +
-          version +
-          "_darwin_amd64.tar.gz"
+        'https://github.com/in-toto/witness/releases/download/v' + version + '/witness_' + version + '_darwin_amd64.tar.gz'
       );
     } else {
       witnessTar = await tc.downloadTool(
-        "https://github.com/in-toto/witness/releases/download/v" +
-          version +
-          "/witness_" +
-          version +
-          "_linux_amd64.tar.gz"
+        'https://github.com/in-toto/witness/releases/download/v' + version + '/witness_' + version + '_linux_amd64.tar.gz'
       );
     }
 
     if (!fs.existsSync(witnessInstallDir)) {
-      console.log("Creating witness install directory at " + witnessInstallDir);
+      console.log('Creating witness install directory at ' + witnessInstallDir);
       fs.mkdirSync(witnessInstallDir, { recursive: true });
     }
 
-    console.log("Extracting witness at: " + witnessInstallDir);
+    console.log('Extracting witness at: ' + witnessInstallDir);
     witnessPath = await tc.extractTar(witnessTar, witnessInstallDir);
-    const cachedPath = await tc.cacheFile(
-      path.join(witnessPath, "witness"),
-      "witness",
-      "witness",
-      version
-    );
-    console.log("Witness cached at: " + cachedPath);
+    const cachedPath = await tc.cacheFile(path.join(witnessPath, 'witness'), 'witness', 'witness', version);
+    console.log('Witness cached at: ' + cachedPath);
   }
 
   core.addPath(witnessPath);
 
-  const step = core.getInput("step");
-  const archivistaServer = core.getInput("archivista-server");
-  const attestations = core.getInput("attestations").split(" ");
-  const certificate = core.getInput("certificate");
-  const enableArchivista = core.getInput("enable-archivista") === "true";
-  let fulcio = core.getInput("fulcio");
-  let fulcioOidcClientId = core.getInput("fulcio-oidc-client-id");
-  let fulcioOidcIssuer = core.getInput("fulcio-oidc-issuer");
-  const fulcioToken = core.getInput("fulcio-token");
-  const intermediates = core.getInput("intermediates").split(" ");
-  const key = core.getInput("key");
-  let outfile = core.getInput("outfile");
-  outfile = outfile
-    ? outfile
-    : path.join(os.tmpdir(), step + "-attestation.json");
-  const productExcludeGlob = core.getInput("product-exclude-glob");
-  const productIncludeGlob = core.getInput("product-include-glob");
-  const spiffeSocket = core.getInput("spiffe-socket");
+  const step = core.getInput('step');
+  const archivistaServer = core.getInput('archivista-server');
+  const attestations = core.getInput('attestations').split(' ');
+  const certificate = core.getInput('certificate');
+  const enableArchivista = core.getInput('enable-archivista') === 'true';
+  let fulcio = core.getInput('fulcio');
+  let fulcioOidcClientId = core.getInput('fulcio-oidc-client-id');
+  let fulcioOidcIssuer = core.getInput('fulcio-oidc-issuer');
+  const fulcioToken = core.getInput('fulcio-token');
+  const intermediates = core.getInput('intermediates').split(' ');
+  const key = core.getInput('key');
+  let outfile = core.getInput('outfile');
+  outfile = outfile ? outfile : path.join(os.tmpdir(), step + '-attestation.json');
+  const productExcludeGlob = core.getInput('product-exclude-glob');
+  const productIncludeGlob = core.getInput('product-include-glob');
+  const spiffeSocket = core.getInput('spiffe-socket');
 
-  let timestampServers = core.getInput("timestamp-servers");
-  const trace = core.getInput("trace");
-  const workingdir = core.getInput("workingdir");
-  const enableSigstore = core.getInput("enable-sigstore") === "true";
-  const command = core.getInput("command");
+  let timestampServers = core.getInput('timestamp-servers');
+  const trace = core.getInput('trace');
+  const enableSigstore = core.getInput('enable-sigstore') === 'true';
+  const command = core.getInput('command');
 
-  const exportLink = core.getInput("attestor-link-export") === "true";
-  const exportSBOM = core.getInput("attestor-sbom-export") === "true";
-  const exportSLSA = core.getInput("attestor-slsa-export") === "true";
-  const mavenPOM = core.getInput("attestor-maven-pom-path");
+  const exportLink = core.getInput('attestor-link-export') === 'true';
+  const exportSBOM = core.getInput('attestor-sbom-export') === 'true';
+  const exportSLSA = core.getInput('attestor-slsa-export') === 'true';
+  const mavenPOM = core.getInput('attestor-maven-pom-path');
 
-  const cmd = ["run"];
+  const cmd = ['run'];
 
   if (enableSigstore) {
-    fulcio = fulcio || "https://fulcio.sigstore.dev";
-    fulcioOidcClientId = fulcioOidcClientId || "sigstore";
-    fulcioOidcIssuer = fulcioOidcIssuer || "https://oauth2.sigstore.dev/auth";
-    timestampServers = "https://freetsa.org/tsr " + timestampServers;
+    fulcio = fulcio || 'https://fulcio.sigstore.dev';
+    fulcioOidcClientId = fulcioOidcClientId || 'sigstore';
+    fulcioOidcIssuer = fulcioOidcIssuer || 'https://oauth2.sigstore.dev/auth';
+    timestampServers = 'https://freetsa.org/tsr ' + timestampServers;
   }
 
   if (attestations.length) {
@@ -143,7 +125,7 @@ async function run() {
   if (step) cmd.push(`-s=${step}`);
 
   if (timestampServers) {
-    const timestampServerValues = timestampServers.split(" ");
+    const timestampServerValues = timestampServers.split(' ');
     timestampServerValues.forEach((timestampServer) => {
       timestampServer = timestampServer.trim();
       if (timestampServer.length > 0) {
@@ -154,22 +136,22 @@ async function run() {
 
   if (trace) cmd.push(`--trace=${trace}`);
   if (outfile) cmd.push(`--outfile=${outfile}`);
-  core.info("Running in directory " + process.env.GITHUB_WORKSPACE);
+  core.info('Running in directory ' + fullWorkspacePath);
 
   process.env.PATH = `${__dirname}:${process.env.PATH}`;
   process.env.PATH = `${process.env.PATH}:/bin:/usr/bin`;
 
   // Change working directory to the root of the repo
-  process.chdir(process.env.GITHUB_WORKSPACE);
+  process.chdir(fullWorkspacePath);
 
   const commandArray = command.match(/(?:[^\s"]+|"[^"]*")+/g);
 
   // Execute the command and capture its output
-  const runArray = ["witness", ...cmd, "--", ...commandArray],
-    commandString = runArray.join(" ");
+  const runArray = ['witness', ...cmd, '--', ...commandArray],
+    commandString = runArray.join(' ');
 
-  let output = "";
-  await exec.exec("sh", ["-c", commandString], {
+  let output = '';
+  await exec.exec('sh', ['-c', commandString], {
     cwd: process.cwd(),
     env: process.env,
     listeners: {
@@ -186,10 +168,10 @@ async function run() {
   const gitOIDs = extractDesiredGitOIDs(output);
 
   for (const gitOID of gitOIDs) {
-    console.log("Extracted GitOID:", gitOID);
+    console.log('Extracted GitOID:', gitOID);
 
     // Print the GitOID to the output
-    core.setOutput("git_oid", gitOID);
+    core.setOutput('git_oid', gitOID);
 
     // Construct the artifact URL using Archivista server and GitOID
     const artifactURL = `${archivistaServer}/download/${gitOID}`;
@@ -203,7 +185,7 @@ async function run() {
 
     // Read the contents of the file
     const summaryFile = fs.readFileSync(process.env.GITHUB_STEP_SUMMARY, {
-      encoding: "utf-8",
+      encoding: 'utf-8',
     });
 
     // Check if the file contains the header
@@ -215,7 +197,7 @@ async function run() {
     }
 
     // Construct the table row for the current step
-    const tableRow = `| ${step} | ${attestations.join(", ")} | [${gitOID}](${artifactURL}) |\n`;
+    const tableRow = `| ${step} | ${attestations.join(', ')} | [${gitOID}](${artifactURL}) |\n`;
 
     // Append the table row to the file
     fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, tableRow);
@@ -224,18 +206,18 @@ async function run() {
 }
 
 function extractDesiredGitOIDs(output) {
-  const lines = output.split("\n");
-  const desiredSubstring = "Stored in archivista as ";
+  const lines = output.split('\n');
+  const desiredSubstring = 'Stored in archivista as ';
 
   const matchArray = [];
-  console.log("Looking for GitOID in the output");
+  console.log('Looking for GitOID in the output');
   for (const line of lines) {
     const startIndex = line.indexOf(desiredSubstring);
     if (startIndex !== -1) {
-      console.log("Checking line: ", line);
+      console.log('Checking line: ', line);
       const match = line.match(/[0-9a-fA-F]{64}/);
       if (match) {
-        console.log("Found GitOID: ", match[0]);
+        console.log('Found GitOID: ', match[0]);
         matchArray.push(match[0]);
       }
     }
