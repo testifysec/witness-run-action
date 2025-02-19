@@ -66,7 +66,7 @@ jobs:
           - if: ${{ inputs.pre-command != '' && inputs.pull_request == false }}
             uses: testifysec/witness-run-action@f77c0a5b024ed206a6d2e7426611e4306af4dd66 # v0.2.1
             with:
-              version: 0.6.0
+              version: 0.8.0
               archivista-server: ${{ inputs.archivista-server }}
               step: pre-${{ inputs.step }}
               attestations: ${{ inputs.pre-command-attestations }}
@@ -77,7 +77,7 @@ jobs:
           - if: ${{ inputs.pull_request == false }}
             uses: testifysec/witness-run-action@f77c0a5b024ed206a6d2e7426611e4306af4dd66 # v0.2.1
             with:
-              version: 0.6.0
+              version: 0.8.0
               archivista-server: ${{ inputs.archivista-server }}
               step: ${{ inputs.step }}
               attestations: ${{ inputs.attestations }}
