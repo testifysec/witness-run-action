@@ -5,9 +5,6 @@ inputs:
     description: "Directory to install witness in. The directory will be created if it does not exist"
     required: false
     default: "./"
-  action-ref:
-    description: "Reference to a GitHub Action to run (format: owner/repo@ref). If provided, command is ignored."
-    required: false
   archivista-server:
     description: "URL of the Archivista server to store or retrieve attestations"
     required: false
@@ -36,8 +33,8 @@ inputs:
     required: false
     default: "true"
   command:
-    description: "command to run (not needed if action-ref is provided)"
-    required: false
+    description: "command to run"
+    required: true
   certificate:
     description: "Path to the signing key's certificate"
     required: false
