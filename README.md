@@ -10,7 +10,7 @@ Archivista for attestation storage and distibution.
 
 To use this action, include it in your GitHub workflow YAML file.
 
-### Example
+### Basic Example
 
 ```yaml
 permissions:
@@ -35,6 +35,51 @@ jobs:
           enable-sigstore: false
           command: make build
 ```
+
+### Wrapping GitHub Actions
+
+You can also use this action to wrap other GitHub Actions, creating attestations for them:
+
+```yaml
+permissions:
+  id-token: write # This is required for requesting the JWT
+  contents: read  # This is required for actions/checkout
+
+name: Action Wrapping Example
+on: [push, pull_request]
+
+jobs:
+  test-wrapped-action:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Wrap Another Action
+        uses: testifysec/witness-run-action@v1
+        with:
+          # Action to run
+          action-ref: "actions/hello-world-javascript-action@main"
+          
+          # Inputs to the wrapped action with input- prefix
+          input-who-to-greet: "Sigstore"
+          
+          # Direct inputs (if they don't conflict with witness-run inputs)
+          who-to-greet: "SigstoreNoPrefix"
+          
+          # Witness configuration
+          step: test-action-wrapper
+          attestations: "environment github slsa"
+          attestor-slsa-export: "true"
+          enable-sigstore: "true"
+          enable-archivista: "true"
+```
+
+When wrapping an action:
+1. Specify the action reference using `action-ref` in the format `owner/repo@ref`
+2. Pass inputs to the wrapped action using the `input-` prefix
+3. You can also pass inputs directly if they don't conflict with witness-run's own inputs
+4. Currently only JavaScript-based actions are supported
 
 ## Using Sigstore and Archivista Flags
 This action supports the use of Sigstore and Archivista for creating attestations.
@@ -84,6 +129,8 @@ host your own instances.
 | Name                     | Description                                                                                          | Required | Default                               |
 | ------------------------ | ---------------------------------------------------------------------------------------------------- | -------- | ------------------------------------- |
 | witness-install-dir      | Directory to install the witness tool into. The directory will attempted to be created if it does not exists | No       | ./ |
+| action-ref               | Reference to a GitHub Action to run (format: owner/repo@ref). If provided, command is ignored.      | No*      |                                       |
+| command                  | Command to run (not needed if action-ref is provided)                                               | No*      |                                       |
 | enable-sigstore          | Use Sigstore for attestation. Sets default values for fulcio, fulcio-oidc-client-id, fulcio-oidc-issuer, and timestamp-servers when true | No       | true |
 | enable-archivista        | Use Archivista to store or retrieve attestations                                                     | No       | true                                 | true |
 | archivista-server        | URL of the Archivista server to store or retrieve attestations                                       | No       | <https://archivista.testifysec.io>      |
@@ -103,4 +150,6 @@ host your own instances.
 | timestamp-servers        | Timestamp Authority Servers to use when signing envelope, space-separated                           | No       |                                       |
 | trace                    | Enable tracing for the command                                                                       | No       | false                                 |
 | workingdir               | Directory from which commands will run                                                               | No       |                                       |
+
+\* Either `command` or `action-ref` must be provided
 
