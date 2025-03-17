@@ -379,29 +379,44 @@ async function executeCompositeShellStep(step, actionDir, witnessOptions, witnes
     throw new Error('Invalid shell step: missing run command');
   }
   
-  // Create a script with the content of the run command
-  const shellCommand = `bash -e <<'WITNESS_SHELL_SCRIPT'\n${step.run}\nWITNESS_SHELL_SCRIPT`;
+  // Instead of using a heredoc, we'll create a temporary script file
+  // Create a temporary script file with the content
+  const scriptPath = path.join(os.tmpdir(), `witness-step-${Date.now()}.sh`);
+  fs.writeFileSync(scriptPath, step.run, { mode: 0o755 });
   
   core.info(`Executing composite shell step in directory: ${actionDir}`);
+  core.info(`Created temporary script at: ${scriptPath}`);
   
-  // Use a modified version of runDirectCommandWithWitness that accepts environment variables
+  // Use bash to execute the script directly
+  const shellCommand = `bash -e ${scriptPath}`;
+  
+  // Use our existing command runner to execute the shell command with the right environment
   const commandArray = shellCommand.match(/(?:[^\s"]+|"[^"]*")+/g) || [shellCommand];
   const args = assembleWitnessArgs(witnessOptions, commandArray);
   core.info(`Running witness command: ${witnessExePath}/witness ${args.join(" ")}`);
 
   let output = "";
-  await exec.exec(`${witnessExePath}/witness`, args, {
-    cwd: actionDir,  // Use the action directory as working directory
-    env: env,        // Pass the step environment variables
-    listeners: {
-      stdout: (data) => {
-        output += data.toString();
+  try {
+    await exec.exec(`${witnessExePath}/witness`, args, {
+      cwd: actionDir,  // Use the action directory as working directory
+      env: env,        // Pass the step environment variables
+      listeners: {
+        stdout: (data) => {
+          output += data.toString();
+        },
+        stderr: (data) => {
+          output += data.toString();
+        },
       },
-      stderr: (data) => {
-        output += data.toString();
-      },
-    },
-  });
+    });
+  } finally {
+    // Clean up the temporary script file
+    try {
+      fs.unlinkSync(scriptPath);
+    } catch (error) {
+      core.warning(`Failed to clean up temporary script: ${error.message}`);
+    }
+  }
   
   return output;
 }
