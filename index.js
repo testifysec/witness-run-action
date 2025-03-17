@@ -301,6 +301,8 @@ async function runCompositeActionWithWitness(actionDir, actionConfig, witnessOpt
   
   // Process inputs and add them to the environment
   if (actionConfig.inputs) {
+    core.info(`Processing ${Object.keys(actionConfig.inputs).length} inputs from action config`);
+    
     for (const [inputName, inputConfig] of Object.entries(actionConfig.inputs)) {
       const inputKey = `INPUT_${inputName.replace(/-/g, '_').toUpperCase()}`;
       
@@ -315,6 +317,14 @@ async function runCompositeActionWithWitness(actionDir, actionConfig, witnessOpt
       }
     }
   }
+  
+  // Debug: Log environment variables for troubleshooting
+  core.info(`Environment variables passed to step (input-related only):`);
+  Object.keys(runEnv)
+    .filter(key => key.startsWith('INPUT_'))
+    .forEach(key => {
+      core.info(`  ${key}=${runEnv[key]}`);
+    });
   
   // Execute each step sequentially
   for (let i = 0; i < steps.length; i++) {
@@ -335,7 +345,7 @@ async function runCompositeActionWithWitness(actionDir, actionConfig, witnessOpt
         });
         
         const stepWithProcessedRun = { ...step, run: processedRun };
-        const stepOutput = await executeCompositeShellStep(stepWithProcessedRun, actionDir, witnessOptions, witnessExePath, runEnv);
+        const stepOutput = await executeCompositeShellStep(stepWithProcessedRun, actionDir, witnessOptions, witnessExePath, runEnv, actionConfig);
         
         // If the step has an ID, capture its outputs for subsequent steps
         if (step.id) {
@@ -374,18 +384,49 @@ async function runCompositeActionWithWitness(actionDir, actionConfig, witnessOpt
 /**
  * Executes a shell command step from a composite action
  */
-async function executeCompositeShellStep(step, actionDir, witnessOptions, witnessExePath, env) {
+async function executeCompositeShellStep(step, actionDir, witnessOptions, witnessExePath, env, actionConfig) {
   if (!step.run) {
     throw new Error('Invalid shell step: missing run command');
   }
   
-  // Instead of using a heredoc, we'll create a temporary script file
-  // Create a temporary script file with the content
+  // Process the script content to replace GitHub expressions before execution
+  let scriptContent = step.run;
+  
+  // Replace common GitHub expressions
+  scriptContent = scriptContent.replace(/\$\{\{\s*github\.action_path\s*\}\}/g, actionDir);
+  
+  // Replace inputs expressions
+  scriptContent = scriptContent.replace(/\$\{\{\s*inputs\.([a-zA-Z0-9_-]+)\s*\}\}/g, (match, inputName) => {
+    const normalizedName = inputName.replace(/-/g, '_').toUpperCase();
+    const envVarName = `INPUT_${normalizedName}`;
+    if (env[envVarName]) {
+      return env[envVarName];
+    }
+    // Try to find a default in the action config
+    if (actionConfig.inputs && actionConfig.inputs[inputName] && actionConfig.inputs[inputName].default) {
+      return actionConfig.inputs[inputName].default;
+    }
+    return '';
+  });
+  
+  // Replace step outputs expressions
+  scriptContent = scriptContent.replace(/\$\{\{\s*steps\.([a-zA-Z0-9_-]+)\.outputs\.([a-zA-Z0-9_-]+)\s*\}\}/g, (match, stepId, outputName) => {
+    const envVarName = `STEPS_${stepId.toUpperCase()}_OUTPUTS_${outputName.toUpperCase()}`;
+    return env[envVarName] || '';
+  });
+  
+  // Create a temporary script file with the processed content
   const scriptPath = path.join(os.tmpdir(), `witness-step-${Date.now()}.sh`);
-  fs.writeFileSync(scriptPath, step.run, { mode: 0o755 });
+  fs.writeFileSync(scriptPath, scriptContent, { mode: 0o755 });
   
   core.info(`Executing composite shell step in directory: ${actionDir}`);
   core.info(`Created temporary script at: ${scriptPath}`);
+  
+  // Log the processed script content for debugging
+  core.info(`Script content after processing expressions:`);
+  core.info(`---BEGIN SCRIPT---`);
+  core.info(scriptContent);
+  core.info(`---END SCRIPT---`);
   
   // Use bash to execute the script directly
   const shellCommand = `bash -e ${scriptPath}`;
