@@ -5,9 +5,6 @@ on:
     branches: [ feature/composite-actions ]
   pull_request:
     branches: [ main ]
-    paths:
-      - 'index.js'
-      - '.github/workflows/test-composite-action.yml'
 
 jobs:
   test-simple-composite:
@@ -85,12 +82,12 @@ jobs:
       - name: Build
         run: npm run build
         
-      # Step 3: Run the action with the witness wrapper
+      # Step 3: Run the action with the witness wrapper using remote GitHub action
       - name: Run with witness wrapper
         id: test-witness
         uses: ./
         with:
-          action-ref: ./.github/actions/test-composite
+          action-ref: pcolby/hello-world-composite-action@main
           step: test-composite
           who-to-greet: 'CI Test Runner'
           test-default: 'Custom default value'
@@ -118,4 +115,9 @@ jobs:
           
           # Print the logs to help with debugging
           echo "=== CI Run Logs ==="
-          find /tmp -name "*-attestation.json" | xargs cat || echo "No attestation file found"
+          echo "Git OID: ${{ steps.test-witness.outputs.git_oid }}"
+          
+          # We don't need the attestation file for this test, so don't fail if it's missing
+          if [ -d /tmp ]; then
+            find /tmp -name "*-attestation.json" -print || echo "No attestation files found in /tmp"
+          fi
