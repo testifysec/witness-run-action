@@ -415,6 +415,17 @@ async function executeCompositeShellStep(step, actionDir, witnessOptions, witnes
     return env[envVarName] || '';
   });
   
+  // Special handling for adding action directory to PATH
+  // If the script adds an entry to GITHUB_PATH, directly modify PATH for subsequent steps
+  if (scriptContent.includes('GITHUB_PATH') && scriptContent.includes('>>')) {
+    // For this specific case where adding to GITHUB_PATH, set the PATH for all subsequent steps
+    if (scriptContent.includes(actionDir)) {
+      core.info(`Detected PATH update to include action directory: ${actionDir}`);
+      // Add the action directory to PATH environment variable for subsequent steps
+      env.PATH = `${actionDir}:${env.PATH || ''}`;
+    }
+  }
+  
   // Create a temporary script file with the processed content
   const scriptPath = path.join(os.tmpdir(), `witness-step-${Date.now()}.sh`);
   fs.writeFileSync(scriptPath, scriptContent, { mode: 0o755 });
@@ -427,6 +438,18 @@ async function executeCompositeShellStep(step, actionDir, witnessOptions, witnes
   core.info(`---BEGIN SCRIPT---`);
   core.info(scriptContent);
   core.info(`---END SCRIPT---`);
+  
+  // For commands that might need executables from the action directory,
+  // we need to ensure the action directory is in the PATH
+  if (!env.PATH) {
+    env.PATH = process.env.PATH || '';
+  }
+  
+  // Ensure action directory is in PATH
+  if (!env.PATH.includes(actionDir)) {
+    core.info(`Adding action directory to PATH: ${actionDir}`);
+    env.PATH = `${actionDir}:${env.PATH}`;
+  }
   
   // Use bash to execute the script directly
   const shellCommand = `bash -e ${scriptPath}`;
