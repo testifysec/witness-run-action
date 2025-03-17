@@ -283,6 +283,130 @@ async function runJsActionWithWitness(actionDir, actionConfig, witnessOptions, w
 }
 
 /**
+ * Runs a composite GitHub Action using witness.
+ * Executes each step sequentially, handling both 'run' and 'uses' steps.
+ */
+async function runCompositeActionWithWitness(actionDir, actionConfig, witnessOptions, witnessExePath, actionEnv) {
+  const steps = actionConfig.runs.steps;
+  if (!steps || !Array.isArray(steps)) {
+    throw new Error('Invalid composite action: missing or invalid steps array');
+  }
+
+  core.info(`Executing composite action with ${steps.length} steps`);
+  
+  // Initialize outputs and environment
+  let output = "";
+  const stepOutputs = {};
+  const runEnv = { ...actionEnv };
+  
+  // Process inputs and add them to the environment
+  if (actionConfig.inputs) {
+    for (const [inputName, inputConfig] of Object.entries(actionConfig.inputs)) {
+      const inputKey = `INPUT_${inputName.replace(/-/g, '_').toUpperCase()}`;
+      
+      // Check if the input was provided, or use default
+      if (runEnv[inputKey]) {
+        core.info(`Using provided input: ${inputName}=${runEnv[inputKey]}`);
+      } else if (inputConfig.default) {
+        runEnv[inputKey] = inputConfig.default;
+        core.info(`Using default input: ${inputName}=${inputConfig.default}`);
+      } else if (inputConfig.required) {
+        throw new Error(`Required input '${inputName}' was not provided`);
+      }
+    }
+  }
+  
+  // Execute each step sequentially
+  for (let i = 0; i < steps.length; i++) {
+    const step = steps[i];
+    core.info(`Executing step ${i+1}/${steps.length}: ${step.name || 'unnamed step'}`);
+    
+    // Phase 1: Only implement simple 'run' steps with bash shell
+    if (step.run && (step.shell === 'bash' || !step.shell)) { // Default to bash if shell is not specified
+      try {
+        // Process expression substitutions in the run command
+        let processedRun = step.run;
+        
+        // Simple substitution of input expressions like ${{ inputs.name }}
+        processedRun = processedRun.replace(/\$\{\{\s*inputs\.([a-zA-Z0-9_-]+)\s*\}\}/g, (match, inputName) => {
+          const normalizedName = inputName.replace(/-/g, '_').toUpperCase();
+          const value = runEnv[`INPUT_${normalizedName}`] || '';
+          return value;
+        });
+        
+        const stepWithProcessedRun = { ...step, run: processedRun };
+        const stepOutput = await executeCompositeShellStep(stepWithProcessedRun, actionDir, witnessOptions, witnessExePath, runEnv);
+        
+        // If the step has an ID, capture its outputs for subsequent steps
+        if (step.id) {
+          core.info(`Step ${step.id} completed, parsing outputs`);
+          
+          // Look for outputs in the form of ::set-output name=key::value or echo "key=value" >> $GITHUB_OUTPUT
+          const outputPattern = /::set-output name=([^:]+)::([^\n]*)|echo "([^"=]+)=([^"]*)" >> \$GITHUB_OUTPUT/g;
+          let match;
+          while ((match = outputPattern.exec(stepOutput)) !== null) {
+            const outputName = match[1] || match[3];
+            const outputValue = match[2] || match[4];
+            
+            if (outputName) {
+              stepOutputs[`steps.${step.id}.outputs.${outputName}`] = outputValue;
+              core.info(`Captured output ${outputName}=${outputValue} from step ${step.id}`);
+              
+              // Add to environment for future steps
+              runEnv[`STEPS_${step.id.toUpperCase()}_OUTPUTS_${outputName.toUpperCase()}`] = outputValue;
+            }
+          }
+        }
+        
+        output += stepOutput + "\n";
+      } catch (error) {
+        throw new Error(`Error executing step ${i+1}: ${error.message}`);
+      }
+    } else {
+      // In Phase 1, we'll skip unsupported step types
+      core.warning(`Skipping unsupported step type at index ${i}: Only 'run' steps with 'bash' shell are currently supported`);
+    }
+  }
+  
+  return output;
+}
+
+/**
+ * Executes a shell command step from a composite action
+ */
+async function executeCompositeShellStep(step, actionDir, witnessOptions, witnessExePath, env) {
+  if (!step.run) {
+    throw new Error('Invalid shell step: missing run command');
+  }
+  
+  // Create a script with the content of the run command
+  const shellCommand = `bash -e <<'WITNESS_SHELL_SCRIPT'\n${step.run}\nWITNESS_SHELL_SCRIPT`;
+  
+  core.info(`Executing composite shell step in directory: ${actionDir}`);
+  
+  // Use a modified version of runDirectCommandWithWitness that accepts environment variables
+  const commandArray = shellCommand.match(/(?:[^\s"]+|"[^"]*")+/g) || [shellCommand];
+  const args = assembleWitnessArgs(witnessOptions, commandArray);
+  core.info(`Running witness command: ${witnessExePath}/witness ${args.join(" ")}`);
+
+  let output = "";
+  await exec.exec(`${witnessExePath}/witness`, args, {
+    cwd: actionDir,  // Use the action directory as working directory
+    env: env,        // Pass the step environment variables
+    listeners: {
+      stdout: (data) => {
+        output += data.toString();
+      },
+      stderr: (data) => {
+        output += data.toString();
+      },
+    },
+  });
+  
+  return output;
+}
+
+/**
  * Runs a direct command using witness.
  */
 async function runDirectCommandWithWitness(command, witnessOptions, witnessExePath) {
