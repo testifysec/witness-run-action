@@ -202,12 +202,55 @@ function assembleWitnessArgs(witnessOptions, extraArgs = []) {
 }
 
 /**
+ * Detects the type of GitHub Action based on its metadata.
+ * @param {Object} actionConfig - The parsed action.yml config object
+ * @returns {string} - The action type: 'javascript', 'docker', or 'composite'
+ */
+function detectActionType(actionConfig) {
+  if (!actionConfig.runs) {
+    throw new Error('Invalid action metadata: missing "runs" section');
+  }
+
+  const using = actionConfig.runs.using;
+  
+  if (using === 'node16' || using === 'node20') {
+    return 'javascript';
+  } else if (using === 'docker') {
+    return 'docker';
+  } else if (using === 'composite') {
+    return 'composite';
+  } else {
+    return 'unknown';
+  }
+}
+
+/**
  * Runs a wrapped GitHub Action using witness.
- * It reads the action's metadata, determines the entry point, and executes it.
+ * It reads the action's metadata, determines the type, and executes it with the appropriate handler.
  */
 async function runActionWithWitness(actionDir, witnessOptions, witnessExePath, actionEnv) {
   const actionYmlPath = getActionYamlPath(actionDir);
   const actionConfig = yaml.load(fs.readFileSync(actionYmlPath, 'utf8'));
+  
+  const actionType = detectActionType(actionConfig);
+  core.info(`Detected action type: ${actionType}`);
+  
+  switch (actionType) {
+    case 'javascript':
+      return await runJsActionWithWitness(actionDir, actionConfig, witnessOptions, witnessExePath, actionEnv);
+    case 'docker':
+      throw new Error('Docker-based actions are not yet supported');
+    case 'composite':
+      throw new Error('Composite actions are not yet supported');
+    default:
+      throw new Error(`Unsupported action type: ${actionType}`);
+  }
+}
+
+/**
+ * Runs a JavaScript GitHub Action using witness.
+ */
+async function runJsActionWithWitness(actionDir, actionConfig, witnessOptions, witnessExePath, actionEnv) {
   const entryPoint = actionConfig.runs && actionConfig.runs.main;
   if (!entryPoint) {
     throw new Error('Entry point (runs.main) not defined in action metadata');
