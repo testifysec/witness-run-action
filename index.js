@@ -9,6 +9,7 @@ const yaml = require("js-yaml");
 /**
  * Downloads and sets up the witness binary.
  * Checks for a cached version first; if not found, downloads, extracts, caches, and returns its path.
+ * Returns the full path to the witness executable, not just the directory.
  */
 async function downloadAndSetupWitness() {
   const witnessInstallDir = core.getInput("witness-install-dir") || "./";
@@ -20,7 +21,7 @@ async function downloadAndSetupWitness() {
     const witnessExePath = path.join(cachedDir, "witness");
     console.log(`Found cached witness at: ${witnessExePath}`);
     core.addPath(cachedDir);
-    return path.resolve(witnessExePath);
+    return witnessExePath;  // Return the full path to the executable
   }
 
   // Construct download URL based on OS
@@ -60,7 +61,14 @@ async function downloadAndSetupWitness() {
   core.addPath(path.dirname(cachedPath));
   console.log(`Debug: Added cached directory to PATH: ${path.dirname(cachedPath)}`);
 
-  return path.resolve(cachedPath);
+  // Verify that the returned path includes the executable name
+  if (!cachedPath.endsWith('witness')) {
+    const fullPath = path.join(cachedPath, 'witness');
+    console.log(`Debug: Adding executable name to path: ${fullPath}`);
+    return fullPath;
+  }
+
+  return cachedPath;
 }
 
 /**
@@ -93,16 +101,30 @@ async function downloadAndSetupAction(actionRef) {
 
 /**
  * Extracts the path to the action metadata file (action.yml or action.yaml).
+ * Includes safety checks to prevent path traversal.
  */
 function getActionYamlPath(actionDir) {
-  let actionYmlPath = path.join(actionDir, 'action.yml');
-  if (!fs.existsSync(actionYmlPath)) {
-    actionYmlPath = path.join(actionDir, 'action.yaml');
-    if (!fs.existsSync(actionYmlPath)) {
-      throw new Error('Could not find action.yml or action.yaml in the action repository');
-    }
+  // Validate actionDir is a string to prevent undefined/null issues
+  if (typeof actionDir !== 'string') {
+    throw new Error(`Invalid action directory: ${actionDir}`);
   }
-  return actionYmlPath;
+  
+  // Ensure we're only looking for action.yml/yaml in the exact directory, not in subdirectories
+  const actionYmlPath = path.join(actionDir, 'action.yml');
+  const actionYamlPath = path.join(actionDir, 'action.yaml');
+  
+  // Verify the resolved paths are within the action directory (prevent path traversal)
+  if (!actionYmlPath.startsWith(actionDir) || !actionYamlPath.startsWith(actionDir)) {
+    throw new Error('Security error: Action metadata path resolves outside the action directory');
+  }
+  
+  if (fs.existsSync(actionYmlPath)) {
+    return actionYmlPath;
+  } else if (fs.existsSync(actionYamlPath)) {
+    return actionYamlPath;
+  } else {
+    throw new Error('Could not find action.yml or action.yaml in the action repository');
+  }
 }
 
 /**
@@ -263,10 +285,10 @@ async function runJsActionWithWitness(actionDir, actionConfig, witnessOptions, w
   }
 
   const args = assembleWitnessArgs(witnessOptions, ["node", entryFile]);
-  core.info(`Running witness command: ${witnessExePath}/witness ${args.join(" ")}`);
+  core.info(`Running witness command: ${witnessExePath} ${args.join(" ")}`);
 
   let output = "";
-  await exec.exec(`${witnessExePath}/witness`, args, {
+  await exec.exec(witnessExePath, args, {
     cwd: actionDir,
     env: actionEnv || process.env,
     listeners: {
@@ -283,15 +305,231 @@ async function runJsActionWithWitness(actionDir, actionConfig, witnessOptions, w
 }
 
 /**
+ * Runs a composite GitHub Action using witness.
+ * Executes each step sequentially, handling both 'run' and 'uses' steps.
+ */
+async function runCompositeActionWithWitness(actionDir, actionConfig, witnessOptions, witnessExePath, actionEnv) {
+  const steps = actionConfig.runs.steps;
+  if (!steps || !Array.isArray(steps)) {
+    throw new Error('Invalid composite action: missing or invalid steps array');
+  }
+
+  core.info(`Executing composite action with ${steps.length} steps`);
+  
+  // Initialize outputs and environment
+  let output = "";
+  const stepOutputs = {};
+  const runEnv = { ...actionEnv };
+  
+  // Process inputs and add them to the environment
+  if (actionConfig.inputs) {
+    core.info(`Processing ${Object.keys(actionConfig.inputs).length} inputs from action config`);
+    
+    for (const [inputName, inputConfig] of Object.entries(actionConfig.inputs)) {
+      const inputKey = `INPUT_${inputName.replace(/-/g, '_').toUpperCase()}`;
+      
+      // Check if the input was provided, or use default
+      if (runEnv[inputKey]) {
+        core.info(`Using provided input: ${inputName}=${runEnv[inputKey]}`);
+      } else if (inputConfig.default) {
+        runEnv[inputKey] = inputConfig.default;
+        core.info(`Using default input: ${inputName}=${inputConfig.default}`);
+      } else if (inputConfig.required) {
+        throw new Error(`Required input '${inputName}' was not provided`);
+      }
+    }
+  }
+  
+  // Debug: Log environment variables for troubleshooting
+  core.info(`Environment variables passed to step (input-related only):`);
+  Object.keys(runEnv)
+    .filter(key => key.startsWith('INPUT_'))
+    .forEach(key => {
+      core.info(`  ${key}=${runEnv[key]}`);
+    });
+  
+  // Execute each step sequentially
+  for (let i = 0; i < steps.length; i++) {
+    const step = steps[i];
+    core.info(`Executing step ${i+1}/${steps.length}: ${step.name || 'unnamed step'}`);
+    
+    try {
+      let stepOutput = "";
+      
+      if (step.run && (step.shell === 'bash' || !step.shell)) {
+        // Process expression substitutions in the run command
+        let processedRun = step.run;
+        
+        // Simple substitution of input expressions like ${{ inputs.name }}
+        processedRun = processedRun.replace(/\$\{\{\s*inputs\.([a-zA-Z0-9_-]+)\s*\}\}/g, (match, inputName) => {
+          const normalizedName = inputName.replace(/-/g, '_').toUpperCase();
+          const value = runEnv[`INPUT_${normalizedName}`] || '';
+          return value;
+        });
+        
+        // Replace step outputs references
+        processedRun = processedRun.replace(/\$\{\{\s*steps\.([a-zA-Z0-9_-]+)\.outputs\.([a-zA-Z0-9_-]+)\s*\}\}/g, (match, stepId, outputName) => {
+          const key = `steps.${stepId}.outputs.${outputName}`;
+          return stepOutputs[key] || '';
+        });
+        
+        const stepWithProcessedRun = { ...step, run: processedRun };
+        stepOutput = await executeCompositeShellStep(stepWithProcessedRun, actionDir, witnessOptions, witnessExePath, runEnv, actionConfig);
+      } else if (step.uses) {
+        // Handle uses steps which reference other actions
+        core.info(`Processing 'uses' step: ${step.uses}`);
+        stepOutput = await executeCompositeUsesStep(step, actionDir, witnessOptions, witnessExePath, runEnv, stepOutputs);
+      } else {
+        // Skip unsupported step types
+        core.warning(`Skipping unsupported step type at index ${i}: Currently we only support 'run' steps with 'bash' shell and 'uses' steps`);
+        continue;
+      }
+      
+      // If the step has an ID, capture its outputs for subsequent steps
+      if (step.id) {
+        core.info(`Step ${step.id} completed, parsing outputs`);
+        
+        // Look for outputs in the form of ::set-output name=key::value or echo "key=value" >> $GITHUB_OUTPUT
+        const outputPattern = /::set-output name=([^:]+)::([^\n]*)|echo "([^"=]+)=([^"]*)" >> \$GITHUB_OUTPUT/g;
+        let match;
+        while ((match = outputPattern.exec(stepOutput)) !== null) {
+          const outputName = match[1] || match[3];
+          const outputValue = match[2] || match[4];
+          
+          if (outputName) {
+            stepOutputs[`steps.${step.id}.outputs.${outputName}`] = outputValue;
+            core.info(`Captured output ${outputName}=${outputValue} from step ${step.id}`);
+            
+            // Add to environment for future steps
+            runEnv[`STEPS_${step.id.toUpperCase()}_OUTPUTS_${outputName.toUpperCase()}`] = outputValue;
+          }
+        }
+      }
+      
+      output += stepOutput + "\n";
+    } catch (error) {
+      throw new Error(`Error executing step ${i+1}: ${error.message}`);
+    }
+  }
+  
+  return output;
+}
+
+/**
+ * Executes a shell command step from a composite action
+ */
+async function executeCompositeShellStep(step, actionDir, witnessOptions, witnessExePath, env, actionConfig) {
+  if (!step.run) {
+    throw new Error('Invalid shell step: missing run command');
+  }
+  
+  // Process the script content to replace GitHub expressions before execution
+  let scriptContent = step.run;
+  
+  // Replace common GitHub expressions
+  scriptContent = scriptContent.replace(/\$\{\{\s*github\.action_path\s*\}\}/g, actionDir);
+  
+  // Replace inputs expressions
+  scriptContent = scriptContent.replace(/\$\{\{\s*inputs\.([a-zA-Z0-9_-]+)\s*\}\}/g, (match, inputName) => {
+    const normalizedName = inputName.replace(/-/g, '_').toUpperCase();
+    const envVarName = `INPUT_${normalizedName}`;
+    if (env[envVarName]) {
+      return env[envVarName];
+    }
+    // Try to find a default in the action config
+    if (actionConfig.inputs && actionConfig.inputs[inputName] && actionConfig.inputs[inputName].default) {
+      return actionConfig.inputs[inputName].default;
+    }
+    return '';
+  });
+  
+  // Replace step outputs expressions
+  scriptContent = scriptContent.replace(/\$\{\{\s*steps\.([a-zA-Z0-9_-]+)\.outputs\.([a-zA-Z0-9_-]+)\s*\}\}/g, (match, stepId, outputName) => {
+    const envVarName = `STEPS_${stepId.toUpperCase()}_OUTPUTS_${outputName.toUpperCase()}`;
+    return env[envVarName] || '';
+  });
+  
+  // Special handling for adding action directory to PATH
+  // If the script adds an entry to GITHUB_PATH, directly modify PATH for subsequent steps
+  if (scriptContent.includes('GITHUB_PATH') && scriptContent.includes('>>')) {
+    // For this specific case where adding to GITHUB_PATH, set the PATH for all subsequent steps
+    if (scriptContent.includes(actionDir)) {
+      core.info(`Detected PATH update to include action directory: ${actionDir}`);
+      // Add the action directory to PATH environment variable for subsequent steps
+      env.PATH = `${actionDir}:${env.PATH || ''}`;
+    }
+  }
+  
+  // Create a temporary script file with the processed content
+  const scriptPath = path.join(os.tmpdir(), `witness-step-${Date.now()}.sh`);
+  fs.writeFileSync(scriptPath, scriptContent, { mode: 0o755 });
+  
+  core.info(`Executing composite shell step in directory: ${actionDir}`);
+  core.info(`Created temporary script at: ${scriptPath}`);
+  
+  // Log the processed script content for debugging
+  core.info(`Script content after processing expressions:`);
+  core.info(`---BEGIN SCRIPT---`);
+  core.info(scriptContent);
+  core.info(`---END SCRIPT---`);
+  
+  // For commands that might need executables from the action directory,
+  // we need to ensure the action directory is in the PATH
+  if (!env.PATH) {
+    env.PATH = process.env.PATH || '';
+  }
+  
+  // Ensure action directory is in PATH
+  if (!env.PATH.includes(actionDir)) {
+    core.info(`Adding action directory to PATH: ${actionDir}`);
+    env.PATH = `${actionDir}:${env.PATH}`;
+  }
+  
+  // Use bash to execute the script directly - avoid shell command injection by using an array
+  // Instead of string interpolation, use an array to avoid command injection
+  const shellCommand = ['bash', '-e', scriptPath];
+  
+  // Pass the command array directly, no need for regex parsing which could introduce security issues
+  const commandArray = shellCommand;
+  const args = assembleWitnessArgs(witnessOptions, commandArray);
+  core.info(`Running witness command: ${witnessExePath} ${args.join(" ")}`);
+
+  let output = "";
+  try {
+    await exec.exec(witnessExePath, args, {
+      cwd: actionDir,  // Use the action directory as working directory
+      env: env,        // Pass the step environment variables
+      listeners: {
+        stdout: (data) => {
+          output += data.toString();
+        },
+        stderr: (data) => {
+          output += data.toString();
+        },
+      },
+    });
+  } finally {
+    // Clean up the temporary script file
+    try {
+      fs.unlinkSync(scriptPath);
+    } catch (error) {
+      core.warning(`Failed to clean up temporary script: ${error.message}`);
+    }
+  }
+  
+  return output;
+}
+
+/**
  * Runs a direct command using witness.
  */
 async function runDirectCommandWithWitness(command, witnessOptions, witnessExePath) {
   const commandArray = command.match(/(?:[^\s"]+|"[^"]*")+/g) || [command];
   const args = assembleWitnessArgs(witnessOptions, commandArray);
-  core.info(`Running witness command: ${witnessExePath}/witness ${args.join(" ")}`);
+  core.info(`Running witness command: ${witnessExePath} ${args.join(" ")}`);
 
   let output = "";
-  await exec.exec(`${witnessExePath}/witness`, args, {
+  await exec.exec(witnessExePath, args, {
     cwd: process.env.GITHUB_WORKSPACE || process.cwd(),
     env: process.env,
     listeners: {
@@ -359,6 +597,14 @@ function getWrappedActionEnv() {
       "workingdir", "action-ref"
     ].map(name => name.toLowerCase())
   );
+  
+  // Debug: Log existing environment variables that might be relevant
+  core.info('Debug: Environment variables in getWrappedActionEnv:');
+  ['GITHUB_TOKEN', 'INPUT_GITHUB_TOKEN', 'INPUT_GITHUB-TOKEN', 'INPUT_TOKEN'].forEach(key => {
+    if (process.env[key]) {
+      core.info(`  ${key} is defined`);
+    }
+  });
 
   for (const key in process.env) {
     const match = key.match(/^INPUT_(.+)$/);
@@ -371,6 +617,228 @@ function getWrappedActionEnv() {
     }
   }
   return newEnv;
+}
+
+/**
+ * Executes a 'uses' step from a composite action
+ * Handles both local and GitHub-hosted actions referenced by the 'uses' keyword.
+ */
+async function executeCompositeUsesStep(step, parentActionDir, witnessOptions, witnessExePath, parentEnv, stepOutputs) {
+  if (!step.uses) {
+    throw new Error('Invalid uses step: missing uses reference');
+  }
+
+  core.info(`Executing 'uses' step: ${step.uses}`);
+  
+  // Prepare environment for the nested action
+  const nestedEnv = { ...parentEnv };
+  
+  // Process any 'with' inputs for the nested action
+  if (step.with) {
+    core.info(`Processing 'with' inputs for nested action`);
+    for (const [inputName, inputValue] of Object.entries(step.with)) {
+      // Process expressions in the input value if it's a string
+      let processedValue = inputValue;
+      if (typeof inputValue === 'string') {
+        // Handle expressions like ${{ steps.previous-step.outputs.output-name }}
+        processedValue = inputValue.replace(/\$\{\{\s*steps\.([a-zA-Z0-9_-]+)\.outputs\.([a-zA-Z0-9_-]+)\s*\}\}/g, (match, stepId, outputName) => {
+          const key = `steps.${stepId}.outputs.${outputName}`;
+          return stepOutputs[key] || '';
+        });
+        
+        // Handle expressions like ${{ inputs.name }}
+        processedValue = processedValue.replace(/\$\{\{\s*inputs\.([a-zA-Z0-9_-]+)\s*\}\}/g, (match, inputParam) => {
+          const inputEnvVar = `INPUT_${inputParam.replace(/-/g, '_').toUpperCase()}`;
+          const value = parentEnv[inputEnvVar] || '';
+          core.info(`Replacing input expression inputs.${inputParam} with value: ${value}`);
+          return value;
+        });
+      }
+      
+      const inputKey = `INPUT_${inputName.replace(/-/g, '_').toUpperCase()}`;
+      nestedEnv[inputKey] = processedValue;
+      core.info(`Setting nested action input: ${inputName}=${processedValue}`);
+      
+      // Just add debug logging about what keys we're setting
+      core.info(`Debug: Added env var '${inputKey}' with value type '${typeof processedValue}'`);
+    }
+  }
+  
+  // Debug: Log information about GITHUB_TOKEN in the environment
+  core.info(`Debug: GITHUB_TOKEN in parent env: ${!!parentEnv.GITHUB_TOKEN}`);
+  core.info(`Debug: GITHUB_TOKEN in nested env: ${!!nestedEnv.GITHUB_TOKEN}`);
+  
+  // Determine action type and resolve location
+  let actionDir;
+  let actionReference = step.uses;
+  
+  // Handle local action reference (./ or ../ format)
+  if (actionReference.startsWith('./') || actionReference.startsWith('../')) {
+    // Validate action reference doesn't contain potentially dangerous path components
+    if (actionReference.includes('\\') || actionReference.includes('//')) {
+      throw new Error(`Invalid action reference path: ${actionReference} contains unsafe path components`);
+    }
+    
+    core.info(`Resolving local action reference: ${actionReference}`);
+    core.info(`Parent action directory: ${parentActionDir}`);
+    
+    // Log working directory and GITHUB_WORKSPACE
+    core.info(`Current working directory: ${process.cwd()}`);
+    core.info(`GITHUB_WORKSPACE: ${process.env.GITHUB_WORKSPACE || 'not set'}`);
+    
+    // First, try resolving path relative to parent action
+    const actionDirFromParent = path.resolve(parentActionDir, actionReference);
+    
+    // Validate the resolved path doesn't escape outside the repository root
+    const workspaceDir = process.env.GITHUB_WORKSPACE || process.cwd();
+    if (!actionDirFromParent.startsWith(workspaceDir) && !actionDirFromParent.startsWith(parentActionDir)) {
+      throw new Error(`Security error: Action path would resolve outside the repository: ${actionDirFromParent}`);
+    }
+    
+    core.info(`Checking if action exists at path relative to parent: ${actionDirFromParent}`);
+    
+    const hasActionYml = fs.existsSync(path.join(actionDirFromParent, 'action.yml'));
+    const hasActionYaml = fs.existsSync(path.join(actionDirFromParent, 'action.yaml'));
+    core.info(`action.yml exists at parent-relative path: ${hasActionYml}`);
+    core.info(`action.yaml exists at parent-relative path: ${hasActionYaml}`);
+    
+    if (hasActionYml || hasActionYaml) {
+      actionDir = actionDirFromParent;
+      core.info(`Resolved local action directory (relative to parent): ${actionDir}`);
+    } else {
+      // If not found, try resolving from workspace root
+      const workspaceDir = process.env.GITHUB_WORKSPACE || process.cwd();
+      
+      // Try with and without the leading ./
+      const pathWithoutDot = actionReference.replace(/^\.\//, '');
+      core.info(`Trying workspace-relative path without leading ./: ${pathWithoutDot}`);
+      
+      const actionDirFromWorkspace = path.resolve(workspaceDir, pathWithoutDot);
+      
+      // Validate the resolved path doesn't escape outside the repository root
+      if (!actionDirFromWorkspace.startsWith(workspaceDir)) {
+        throw new Error(`Security error: Action path would resolve outside the repository: ${actionDirFromWorkspace}`);
+      }
+      
+      core.info(`Checking if action exists at path relative to workspace: ${actionDirFromWorkspace}`);
+      
+      const wsHasActionYml = fs.existsSync(path.join(actionDirFromWorkspace, 'action.yml'));
+      const wsHasActionYaml = fs.existsSync(path.join(actionDirFromWorkspace, 'action.yaml'));
+      core.info(`action.yml exists at workspace-relative path: ${wsHasActionYml}`);
+      core.info(`action.yaml exists at workspace-relative path: ${wsHasActionYaml}`);
+      
+      if (wsHasActionYml || wsHasActionYaml) {
+        actionDir = actionDirFromWorkspace;
+        core.info(`Resolved local action directory (relative to workspace): ${actionDir}`);
+      } else {
+        // If still not found, list the directories to help debug
+        core.info(`Failed to find action at either parent-relative or workspace-relative paths. Directory listings:`);
+        try {
+          if (fs.existsSync(path.dirname(actionDirFromParent))) {
+            core.info(`Contents of ${path.dirname(actionDirFromParent)}:`);
+            core.info(JSON.stringify(fs.readdirSync(path.dirname(actionDirFromParent))));
+          }
+          
+          if (fs.existsSync(path.dirname(actionDirFromWorkspace))) {
+            core.info(`Contents of ${path.dirname(actionDirFromWorkspace)}:`);
+            core.info(JSON.stringify(fs.readdirSync(path.dirname(actionDirFromWorkspace))));
+          }
+          
+          if (fs.existsSync(workspaceDir)) {
+            core.info(`Contents of workspace ${workspaceDir}:`);
+            core.info(JSON.stringify(fs.readdirSync(workspaceDir)));
+            
+            // Check .github/actions directory specifically
+            const githubActionsDir = path.join(workspaceDir, '.github', 'actions');
+            if (fs.existsSync(githubActionsDir)) {
+              core.info(`Contents of ${githubActionsDir}:`);
+              core.info(JSON.stringify(fs.readdirSync(githubActionsDir)));
+            }
+          }
+        } catch (error) {
+          core.info(`Error listing directories: ${error.message}`);
+        }
+        
+        throw new Error(`Could not find action at ${actionReference} (tried both relative to parent action and workspace root)`);
+      }
+    }
+  } 
+  // Handle GitHub-hosted action (owner/repo@ref format)
+  else if (actionReference.includes('@')) {
+    core.info(`Downloading GitHub-hosted action: ${actionReference}`);
+    actionDir = await downloadAndSetupAction(actionReference);
+    core.info(`Downloaded GitHub action to: ${actionDir}`);
+  } 
+  // Handle action reference without explicit ref (defaults to latest)
+  else if (actionReference.includes('/')) {
+    core.info(`Downloading GitHub-hosted action with implicit ref: ${actionReference}@main`);
+    actionDir = await downloadAndSetupAction(`${actionReference}@main`);
+    core.info(`Downloaded GitHub action to: ${actionDir}`);
+  } 
+  else {
+    throw new Error(`Unsupported action reference format: ${actionReference}`);
+  }
+  
+  try {
+    // Get action metadata
+    const actionYmlPath = getActionYamlPath(actionDir);
+    const actionConfig = yaml.load(fs.readFileSync(actionYmlPath, 'utf8'));
+    
+    // Detect action type
+    const actionType = detectActionType(actionConfig);
+    core.info(`Nested action type: ${actionType}`);
+    
+    // Execute the action based on its type
+    let output = "";
+    
+    switch (actionType) {
+      case 'javascript':
+        output = await runJsActionWithWitness(actionDir, actionConfig, witnessOptions, witnessExePath, nestedEnv);
+        break;
+      case 'composite':
+        output = await runCompositeActionWithWitness(actionDir, actionConfig, witnessOptions, witnessExePath, nestedEnv);
+        break;
+      case 'docker':
+        throw new Error('Docker-based actions are not yet supported in nested actions');
+      default:
+        throw new Error(`Unsupported nested action type: ${actionType}`);
+    }
+    
+    // Process action outputs if defined
+    if (actionConfig.outputs) {
+      core.info('Processing nested action outputs');
+      for (const [outputName, outputConfig] of Object.entries(actionConfig.outputs)) {
+        // Extract the value from the expression
+        if (outputConfig.value && typeof outputConfig.value === 'string') {
+          const valueMatch = outputConfig.value.match(/\$\{\{\s*steps\.([^.]+)\.outputs\.([^}]+)\s*\}\}/);
+          if (valueMatch) {
+            const [_, stepId, stepOutputName] = valueMatch;
+            const key = `steps.${stepId}.outputs.${stepOutputName}`;
+            
+            // Access the output from the nested action's step outputs
+            const outputValue = stepOutputs[key] || '';
+            
+            // Make this output available to the parent action using a special format
+            const nestedOutputKey = `NESTED_ACTION_OUTPUT_${outputName.replace(/-/g, '_').toUpperCase()}`;
+            parentEnv[nestedOutputKey] = outputValue;
+            
+            // Add to the step.id.outputs map if the current step has an ID
+            if (step.id) {
+              stepOutputs[`steps.${step.id}.outputs.${outputName}`] = outputValue;
+              core.info(`Propagated nested action output: ${outputName}=${outputValue}`);
+            }
+          }
+        }
+      }
+    }
+    
+    return output;
+  } finally {
+    // Clean up if this was a downloaded action (not a local reference)
+    if (!actionReference.startsWith('./')) {
+      cleanUpDirectory(actionDir);
+    }
+  }
 }
 
 /**
@@ -453,9 +921,90 @@ async function run() {
     if (actionRef) {
       core.info(`Wrapping GitHub Action: ${actionRef}`);
       const newEnv = getWrappedActionEnv();
-      const actionDir = await downloadAndSetupAction(actionRef);
+      
+      let actionDir;
+      // Handle local action references (./ or ../ format)
+      if (actionRef.startsWith('./') || actionRef.startsWith('../')) {
+        // Validate action reference doesn't contain potentially dangerous path components
+        if (actionRef.includes('\\') || actionRef.includes('//')) {
+          throw new Error(`Invalid action reference path: ${actionRef} contains unsafe path components`);
+        }
+        
+        core.info(`Using local action reference: ${actionRef}`);
+        
+        // Log working directory and GITHUB_WORKSPACE for debugging
+        core.info(`Current working directory: ${process.cwd()}`);
+        core.info(`GITHUB_WORKSPACE: ${process.env.GITHUB_WORKSPACE || 'not set'}`);
+        
+        const workspaceDir = process.env.GITHUB_WORKSPACE || process.cwd();
+        
+        // Try with and without leading ./
+        const pathWithoutDot = actionRef.replace(/^\.\//, '');
+        core.info(`Trying to resolve path without leading ./: ${pathWithoutDot}`);
+        
+        const actionDirPath = path.resolve(workspaceDir, pathWithoutDot);
+        
+        // Validate the resolved path doesn't escape outside the repository root
+        if (!actionDirPath.startsWith(workspaceDir)) {
+          throw new Error(`Security error: Action path would resolve outside the repository: ${actionDirPath}`);
+        }
+        
+        core.info(`Fully resolved action path: ${actionDirPath}`);
+        
+        const hasActionYml = fs.existsSync(path.join(actionDirPath, 'action.yml'));
+        const hasActionYaml = fs.existsSync(path.join(actionDirPath, 'action.yaml'));
+        
+        core.info(`action.yml exists: ${hasActionYml}`);
+        core.info(`action.yaml exists: ${hasActionYaml}`);
+        
+        if (hasActionYml || hasActionYaml) {
+          actionDir = actionDirPath;
+          core.info(`Resolved local action directory: ${actionDir}`);
+        } else {
+          // If we couldn't find it, let's list directories to help debug
+          core.info(`Failed to locate action. Directory listings for debugging:`);
+          
+          try {
+            // List the expected parent directory
+            const parentDir = path.dirname(actionDirPath);
+            if (fs.existsSync(parentDir)) {
+              core.info(`Contents of ${parentDir}:`);
+              core.info(JSON.stringify(fs.readdirSync(parentDir)));
+            } else {
+              core.info(`Parent directory ${parentDir} does not exist`);
+            }
+            
+            // List the workspace root
+            core.info(`Contents of workspace ${workspaceDir}:`);
+            core.info(JSON.stringify(fs.readdirSync(workspaceDir)));
+            
+            // Check if .github/actions exists and list it
+            const githubActionsDir = path.join(workspaceDir, '.github', 'actions');
+            if (fs.existsSync(githubActionsDir)) {
+              core.info(`Contents of ${githubActionsDir}:`);
+              core.info(JSON.stringify(fs.readdirSync(githubActionsDir)));
+            } else {
+              core.info(`${githubActionsDir} directory does not exist`);
+            }
+          } catch (error) {
+            core.info(`Error listing directories: ${error.message}`);
+          }
+          
+          throw new Error(`Could not find action at ${actionRef} (looking in ${actionDirPath})`);
+        }
+      } else {
+        // For owner/repo@ref format
+        core.info(`Downloading remote action: ${actionRef}`);
+        actionDir = await downloadAndSetupAction(actionRef);
+        core.info(`Downloaded action to: ${actionDir}`);
+      }
+      
       output = await runActionWithWitness(actionDir, witnessOptions, witnessExePath, newEnv);
-      cleanUpDirectory(actionDir);
+      
+      // Only clean up directory if it was a downloaded action
+      if (!actionRef.startsWith('./') && !actionRef.startsWith('../')) {
+        cleanUpDirectory(actionDir);
+      }
     } else if (command) {
       core.info(`Running command: ${command}`);
       output = await runDirectCommandWithWitness(command, witnessOptions, witnessExePath);
