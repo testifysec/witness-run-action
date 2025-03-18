@@ -34296,16 +34296,30 @@ async function downloadAndSetupAction(actionRef) {
 
 /**
  * Extracts the path to the action metadata file (action.yml or action.yaml).
+ * Includes safety checks to prevent path traversal.
  */
 function getActionYamlPath(actionDir) {
-  let actionYmlPath = path.join(actionDir, 'action.yml');
-  if (!fs.existsSync(actionYmlPath)) {
-    actionYmlPath = path.join(actionDir, 'action.yaml');
-    if (!fs.existsSync(actionYmlPath)) {
-      throw new Error('Could not find action.yml or action.yaml in the action repository');
-    }
+  // Validate actionDir is a string to prevent undefined/null issues
+  if (typeof actionDir !== 'string') {
+    throw new Error(`Invalid action directory: ${actionDir}`);
   }
-  return actionYmlPath;
+  
+  // Ensure we're only looking for action.yml/yaml in the exact directory, not in subdirectories
+  const actionYmlPath = path.join(actionDir, 'action.yml');
+  const actionYamlPath = path.join(actionDir, 'action.yaml');
+  
+  // Verify the resolved paths are within the action directory (prevent path traversal)
+  if (!actionYmlPath.startsWith(actionDir) || !actionYamlPath.startsWith(actionDir)) {
+    throw new Error('Security error: Action metadata path resolves outside the action directory');
+  }
+  
+  if (fs.existsSync(actionYmlPath)) {
+    return actionYmlPath;
+  } else if (fs.existsSync(actionYamlPath)) {
+    return actionYamlPath;
+  } else {
+    throw new Error('Could not find action.yml or action.yaml in the action repository');
+  }
 }
 
 /**
@@ -34466,10 +34480,10 @@ async function runJsActionWithWitness(actionDir, actionConfig, witnessOptions, w
   }
 
   const args = assembleWitnessArgs(witnessOptions, ["node", entryFile]);
-  core.info(`Running witness command: ${witnessExePath}/witness ${args.join(" ")}`);
+  core.info(`Running witness command: ${witnessExePath} ${args.join(" ")}`);
 
   let output = "";
-  await exec.exec(`${witnessExePath}/witness`, args, {
+  await exec.exec(witnessExePath, args, {
     cwd: actionDir,
     env: actionEnv || process.env,
     listeners: {
@@ -34666,17 +34680,18 @@ async function executeCompositeShellStep(step, actionDir, witnessOptions, witnes
     env.PATH = `${actionDir}:${env.PATH}`;
   }
   
-  // Use bash to execute the script directly
-  const shellCommand = `bash -e ${scriptPath}`;
+  // Use bash to execute the script directly - avoid shell command injection by using an array
+  // Instead of string interpolation, use an array to avoid command injection
+  const shellCommand = ['bash', '-e', scriptPath];
   
-  // Use our existing command runner to execute the shell command with the right environment
-  const commandArray = shellCommand.match(/(?:[^\s"]+|"[^"]*")+/g) || [shellCommand];
+  // Pass the command array directly, no need for regex parsing which could introduce security issues
+  const commandArray = shellCommand;
   const args = assembleWitnessArgs(witnessOptions, commandArray);
-  core.info(`Running witness command: ${witnessExePath}/witness ${args.join(" ")}`);
+  core.info(`Running witness command: ${witnessExePath} ${args.join(" ")}`);
 
   let output = "";
   try {
-    await exec.exec(`${witnessExePath}/witness`, args, {
+    await exec.exec(witnessExePath, args, {
       cwd: actionDir,  // Use the action directory as working directory
       env: env,        // Pass the step environment variables
       listeners: {
@@ -34706,10 +34721,10 @@ async function executeCompositeShellStep(step, actionDir, witnessOptions, witnes
 async function runDirectCommandWithWitness(command, witnessOptions, witnessExePath) {
   const commandArray = command.match(/(?:[^\s"]+|"[^"]*")+/g) || [command];
   const args = assembleWitnessArgs(witnessOptions, commandArray);
-  core.info(`Running witness command: ${witnessExePath}/witness ${args.join(" ")}`);
+  core.info(`Running witness command: ${witnessExePath} ${args.join(" ")}`);
 
   let output = "";
-  await exec.exec(`${witnessExePath}/witness`, args, {
+  await exec.exec(witnessExePath, args, {
     cwd: process.env.GITHUB_WORKSPACE || process.cwd(),
     env: process.env,
     listeners: {
@@ -34854,6 +34869,11 @@ async function executeCompositeUsesStep(step, parentActionDir, witnessOptions, w
   
   // Handle local action reference (./ or ../ format)
   if (actionReference.startsWith('./') || actionReference.startsWith('../')) {
+    // Validate action reference doesn't contain potentially dangerous path components
+    if (actionReference.includes('\\') || actionReference.includes('//')) {
+      throw new Error(`Invalid action reference path: ${actionReference} contains unsafe path components`);
+    }
+    
     core.info(`Resolving local action reference: ${actionReference}`);
     core.info(`Parent action directory: ${parentActionDir}`);
     
@@ -34863,6 +34883,13 @@ async function executeCompositeUsesStep(step, parentActionDir, witnessOptions, w
     
     // First, try resolving path relative to parent action
     const actionDirFromParent = path.resolve(parentActionDir, actionReference);
+    
+    // Validate the resolved path doesn't escape outside the repository root
+    const workspaceDir = process.env.GITHUB_WORKSPACE || process.cwd();
+    if (!actionDirFromParent.startsWith(workspaceDir) && !actionDirFromParent.startsWith(parentActionDir)) {
+      throw new Error(`Security error: Action path would resolve outside the repository: ${actionDirFromParent}`);
+    }
+    
     core.info(`Checking if action exists at path relative to parent: ${actionDirFromParent}`);
     
     const hasActionYml = fs.existsSync(path.join(actionDirFromParent, 'action.yml'));
@@ -34882,6 +34909,12 @@ async function executeCompositeUsesStep(step, parentActionDir, witnessOptions, w
       core.info(`Trying workspace-relative path without leading ./: ${pathWithoutDot}`);
       
       const actionDirFromWorkspace = path.resolve(workspaceDir, pathWithoutDot);
+      
+      // Validate the resolved path doesn't escape outside the repository root
+      if (!actionDirFromWorkspace.startsWith(workspaceDir)) {
+        throw new Error(`Security error: Action path would resolve outside the repository: ${actionDirFromWorkspace}`);
+      }
+      
       core.info(`Checking if action exists at path relative to workspace: ${actionDirFromWorkspace}`);
       
       const wsHasActionYml = fs.existsSync(path.join(actionDirFromWorkspace, 'action.yml'));
@@ -35087,6 +35120,11 @@ async function run() {
       let actionDir;
       // Handle local action references (./ or ../ format)
       if (actionRef.startsWith('./') || actionRef.startsWith('../')) {
+        // Validate action reference doesn't contain potentially dangerous path components
+        if (actionRef.includes('\\') || actionRef.includes('//')) {
+          throw new Error(`Invalid action reference path: ${actionRef} contains unsafe path components`);
+        }
+        
         core.info(`Using local action reference: ${actionRef}`);
         
         // Log working directory and GITHUB_WORKSPACE for debugging
@@ -35100,6 +35138,12 @@ async function run() {
         core.info(`Trying to resolve path without leading ./: ${pathWithoutDot}`);
         
         const actionDirPath = path.resolve(workspaceDir, pathWithoutDot);
+        
+        // Validate the resolved path doesn't escape outside the repository root
+        if (!actionDirPath.startsWith(workspaceDir)) {
+          throw new Error(`Security error: Action path would resolve outside the repository: ${actionDirPath}`);
+        }
+        
         core.info(`Fully resolved action path: ${actionDirPath}`);
         
         const hasActionYml = fs.existsSync(path.join(actionDirPath, 'action.yml'));
