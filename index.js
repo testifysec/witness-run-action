@@ -331,9 +331,10 @@ async function runCompositeActionWithWitness(actionDir, actionConfig, witnessOpt
     const step = steps[i];
     core.info(`Executing step ${i+1}/${steps.length}: ${step.name || 'unnamed step'}`);
     
-    // Phase 1: Only implement simple 'run' steps with bash shell
-    if (step.run && (step.shell === 'bash' || !step.shell)) { // Default to bash if shell is not specified
-      try {
+    try {
+      let stepOutput = "";
+      
+      if (step.run && (step.shell === 'bash' || !step.shell)) {
         // Process expression substitutions in the run command
         let processedRun = step.run;
         
@@ -344,37 +345,48 @@ async function runCompositeActionWithWitness(actionDir, actionConfig, witnessOpt
           return value;
         });
         
-        const stepWithProcessedRun = { ...step, run: processedRun };
-        const stepOutput = await executeCompositeShellStep(stepWithProcessedRun, actionDir, witnessOptions, witnessExePath, runEnv, actionConfig);
+        // Replace step outputs references
+        processedRun = processedRun.replace(/\$\{\{\s*steps\.([a-zA-Z0-9_-]+)\.outputs\.([a-zA-Z0-9_-]+)\s*\}\}/g, (match, stepId, outputName) => {
+          const key = `steps.${stepId}.outputs.${outputName}`;
+          return stepOutputs[key] || '';
+        });
         
-        // If the step has an ID, capture its outputs for subsequent steps
-        if (step.id) {
-          core.info(`Step ${step.id} completed, parsing outputs`);
+        const stepWithProcessedRun = { ...step, run: processedRun };
+        stepOutput = await executeCompositeShellStep(stepWithProcessedRun, actionDir, witnessOptions, witnessExePath, runEnv, actionConfig);
+      } else if (step.uses) {
+        // Handle uses steps which reference other actions
+        core.info(`Processing 'uses' step: ${step.uses}`);
+        stepOutput = await executeCompositeUsesStep(step, actionDir, witnessOptions, witnessExePath, runEnv, stepOutputs);
+      } else {
+        // Skip unsupported step types
+        core.warning(`Skipping unsupported step type at index ${i}: Currently we only support 'run' steps with 'bash' shell and 'uses' steps`);
+        continue;
+      }
+      
+      // If the step has an ID, capture its outputs for subsequent steps
+      if (step.id) {
+        core.info(`Step ${step.id} completed, parsing outputs`);
+        
+        // Look for outputs in the form of ::set-output name=key::value or echo "key=value" >> $GITHUB_OUTPUT
+        const outputPattern = /::set-output name=([^:]+)::([^\n]*)|echo "([^"=]+)=([^"]*)" >> \$GITHUB_OUTPUT/g;
+        let match;
+        while ((match = outputPattern.exec(stepOutput)) !== null) {
+          const outputName = match[1] || match[3];
+          const outputValue = match[2] || match[4];
           
-          // Look for outputs in the form of ::set-output name=key::value or echo "key=value" >> $GITHUB_OUTPUT
-          const outputPattern = /::set-output name=([^:]+)::([^\n]*)|echo "([^"=]+)=([^"]*)" >> \$GITHUB_OUTPUT/g;
-          let match;
-          while ((match = outputPattern.exec(stepOutput)) !== null) {
-            const outputName = match[1] || match[3];
-            const outputValue = match[2] || match[4];
+          if (outputName) {
+            stepOutputs[`steps.${step.id}.outputs.${outputName}`] = outputValue;
+            core.info(`Captured output ${outputName}=${outputValue} from step ${step.id}`);
             
-            if (outputName) {
-              stepOutputs[`steps.${step.id}.outputs.${outputName}`] = outputValue;
-              core.info(`Captured output ${outputName}=${outputValue} from step ${step.id}`);
-              
-              // Add to environment for future steps
-              runEnv[`STEPS_${step.id.toUpperCase()}_OUTPUTS_${outputName.toUpperCase()}`] = outputValue;
-            }
+            // Add to environment for future steps
+            runEnv[`STEPS_${step.id.toUpperCase()}_OUTPUTS_${outputName.toUpperCase()}`] = outputValue;
           }
         }
-        
-        output += stepOutput + "\n";
-      } catch (error) {
-        throw new Error(`Error executing step ${i+1}: ${error.message}`);
       }
-    } else {
-      // In Phase 1, we'll skip unsupported step types
-      core.warning(`Skipping unsupported step type at index ${i}: Only 'run' steps with 'bash' shell are currently supported`);
+      
+      output += stepOutput + "\n";
+    } catch (error) {
+      throw new Error(`Error executing step ${i+1}: ${error.message}`);
     }
   }
   
@@ -574,6 +586,130 @@ function getWrappedActionEnv() {
     }
   }
   return newEnv;
+}
+
+/**
+ * Executes a 'uses' step from a composite action
+ * Handles both local and GitHub-hosted actions referenced by the 'uses' keyword.
+ */
+async function executeCompositeUsesStep(step, parentActionDir, witnessOptions, witnessExePath, parentEnv, stepOutputs) {
+  if (!step.uses) {
+    throw new Error('Invalid uses step: missing uses reference');
+  }
+
+  core.info(`Executing 'uses' step: ${step.uses}`);
+  
+  // Prepare environment for the nested action
+  const nestedEnv = { ...parentEnv };
+  
+  // Process any 'with' inputs for the nested action
+  if (step.with) {
+    core.info(`Processing 'with' inputs for nested action`);
+    for (const [inputName, inputValue] of Object.entries(step.with)) {
+      // Process expressions in the input value if it's a string
+      let processedValue = inputValue;
+      if (typeof inputValue === 'string') {
+        // Handle expressions like ${{ steps.previous-step.outputs.output-name }}
+        processedValue = inputValue.replace(/\$\{\{\s*steps\.([a-zA-Z0-9_-]+)\.outputs\.([a-zA-Z0-9_-]+)\s*\}\}/g, (match, stepId, outputName) => {
+          const key = `steps.${stepId}.outputs.${outputName}`;
+          return stepOutputs[key] || '';
+        });
+      }
+      
+      const inputKey = `INPUT_${inputName.replace(/-/g, '_').toUpperCase()}`;
+      nestedEnv[inputKey] = processedValue;
+      core.info(`Setting nested action input: ${inputName}=${processedValue}`);
+    }
+  }
+  
+  // Determine action type and resolve location
+  let actionDir;
+  let actionReference = step.uses;
+  
+  // Handle local action reference (./ format)
+  if (actionReference.startsWith('./')) {
+    core.info(`Resolving local action reference: ${actionReference}`);
+    
+    // Adjust path to be relative to the parent action
+    actionDir = path.resolve(parentActionDir, actionReference);
+    core.info(`Resolved local action directory: ${actionDir}`);
+  } 
+  // Handle GitHub-hosted action (owner/repo@ref format)
+  else if (actionReference.includes('@')) {
+    core.info(`Downloading GitHub-hosted action: ${actionReference}`);
+    actionDir = await downloadAndSetupAction(actionReference);
+    core.info(`Downloaded GitHub action to: ${actionDir}`);
+  } 
+  // Handle action reference without explicit ref (defaults to latest)
+  else if (actionReference.includes('/')) {
+    core.info(`Downloading GitHub-hosted action with implicit ref: ${actionReference}@main`);
+    actionDir = await downloadAndSetupAction(`${actionReference}@main`);
+    core.info(`Downloaded GitHub action to: ${actionDir}`);
+  } 
+  else {
+    throw new Error(`Unsupported action reference format: ${actionReference}`);
+  }
+  
+  try {
+    // Get action metadata
+    const actionYmlPath = getActionYamlPath(actionDir);
+    const actionConfig = yaml.load(fs.readFileSync(actionYmlPath, 'utf8'));
+    
+    // Detect action type
+    const actionType = detectActionType(actionConfig);
+    core.info(`Nested action type: ${actionType}`);
+    
+    // Execute the action based on its type
+    let output = "";
+    
+    switch (actionType) {
+      case 'javascript':
+        output = await runJsActionWithWitness(actionDir, actionConfig, witnessOptions, witnessExePath, nestedEnv);
+        break;
+      case 'composite':
+        output = await runCompositeActionWithWitness(actionDir, actionConfig, witnessOptions, witnessExePath, nestedEnv);
+        break;
+      case 'docker':
+        throw new Error('Docker-based actions are not yet supported in nested actions');
+      default:
+        throw new Error(`Unsupported nested action type: ${actionType}`);
+    }
+    
+    // Process action outputs if defined
+    if (actionConfig.outputs) {
+      core.info('Processing nested action outputs');
+      for (const [outputName, outputConfig] of Object.entries(actionConfig.outputs)) {
+        // Extract the value from the expression
+        if (outputConfig.value && typeof outputConfig.value === 'string') {
+          const valueMatch = outputConfig.value.match(/\$\{\{\s*steps\.([^.]+)\.outputs\.([^}]+)\s*\}\}/);
+          if (valueMatch) {
+            const [_, stepId, stepOutputName] = valueMatch;
+            const key = `steps.${stepId}.outputs.${stepOutputName}`;
+            
+            // Access the output from the nested action's step outputs
+            const outputValue = stepOutputs[key] || '';
+            
+            // Make this output available to the parent action using a special format
+            const nestedOutputKey = `NESTED_ACTION_OUTPUT_${outputName.replace(/-/g, '_').toUpperCase()}`;
+            parentEnv[nestedOutputKey] = outputValue;
+            
+            // Add to the step.id.outputs map if the current step has an ID
+            if (step.id) {
+              stepOutputs[`steps.${step.id}.outputs.${outputName}`] = outputValue;
+              core.info(`Propagated nested action output: ${outputName}=${outputValue}`);
+            }
+          }
+        }
+      }
+    }
+    
+    return output;
+  } finally {
+    // Clean up if this was a downloaded action (not a local reference)
+    if (!actionReference.startsWith('./')) {
+      cleanUpDirectory(actionDir);
+    }
+  }
 }
 
 /**

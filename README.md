@@ -79,7 +79,62 @@ When wrapping an action:
 1. Specify the action reference using `action-ref` in the format `owner/repo@ref`
 2. Pass inputs to the wrapped action using the `input-` prefix
 3. You can also pass inputs directly if they don't conflict with witness-run's own inputs
-4. Currently only JavaScript-based actions are supported
+4. Both JavaScript-based actions and composite actions are supported
+
+## Composite Actions
+
+As of witness-run-action@1.0.0, this action supports running composite actions. This means that you
+can use `witness-run-action` to run a GitHub Action that is defined as a composite action.
+
+For example:
+
+```yaml
+- name: Run Composite Action with Witness
+  uses: testifysec/witness-run-action@main
+  with:
+    step: "run-composite-action"
+    action-ref: "pcolby/hello-world-composite-action@v1.0.0"
+    who-to-greet: "GitHub Actions"
+```
+
+### Nested Composite Actions
+
+Starting from this version, witness-run-action also supports nested composite actions. This means that a composite action can use other actions within its steps using the `uses` keyword. Supported formats include:
+
+1. Public GitHub Actions: `owner/repo@ref` 
+2. Local actions: `./path/to/action`
+
+Example of a composite action that uses other actions:
+
+```yaml
+# In action.yml
+name: 'Nested Action Demo'
+runs:
+  using: 'composite'
+  steps:
+    - name: First Step
+      run: echo "First step in composite action"
+      shell: bash
+      
+    - name: Use another action
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        
+    - name: Final Step
+      run: node --version
+      shell: bash
+```
+
+You can run this composite action with witness-run-action using:
+
+```yaml
+- name: Run Nested Composite Action with Witness
+  uses: testifysec/witness-run-action@main
+  with:
+    step: "run-nested-action"
+    action-ref: "owner/nested-action-demo@main"
+```
 
 ## Using Sigstore and Archivista Flags
 This action supports the use of Sigstore and Archivista for creating attestations.
