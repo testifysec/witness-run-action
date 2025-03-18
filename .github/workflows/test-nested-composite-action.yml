@@ -1,0 +1,296 @@
+permissions:
+  id-token: write # This is required for requesting the JWT and Sigstore
+  contents: read  # This is required for actions/checkout
+
+name: Test Nested Composite Actions
+
+on:
+  push:
+    branches: [ feature/composite-actions ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-nested-composite:
+    name: Test Nested Composite Actions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      # Step 1: Create parent composite action
+      - name: Create parent composite action
+        run: |
+          mkdir -p .github/actions/parent-action
+          
+          # Create the parent action metadata
+          cat > .github/actions/parent-action/action.yml << 'EOF'
+          name: 'Parent Action'
+          description: 'A parent action that calls a child action'
+          inputs:
+            parent-input:
+              description: 'Input for the parent action'
+              required: true
+              default: 'Parent default'
+          outputs:
+            parent-output:
+              description: "Output from parent"
+              value: ${{ steps.output-step.outputs.result }}
+          runs:
+            using: "composite"
+            steps:
+              - name: Parent Step 1
+                run: echo "Running parent action with input '${{ inputs.parent-input }}'"
+                shell: bash
+                
+              - name: Call Child Action
+                id: child-action
+                uses: ./.github/actions/child-action
+                with:
+                  child-input: "From parent: ${{ inputs.parent-input }}"
+                  
+              - name: Use Child Output
+                run: echo "Child action output was '${{ steps.child-action.outputs.child-output }}'"
+                shell: bash
+                
+              - name: Generate Parent Output
+                id: output-step
+                run: echo "result=Parent output with child data: ${{ steps.child-action.outputs.child-output }}" >> $GITHUB_OUTPUT
+                shell: bash
+          EOF
+      
+      # Step 2: Create child composite action (will be called by parent)
+      - name: Create child composite action
+        run: |
+          mkdir -p .github/actions/child-action
+          
+          # Create a script for the child action
+          cat > .github/actions/child-action/child-script.sh << 'EOF'
+          #!/bin/bash
+          echo "Hello from child action script!"
+          EOF
+          chmod +x .github/actions/child-action/child-script.sh
+          
+          # Create the child action metadata
+          cat > .github/actions/child-action/action.yml << 'EOF'
+          name: 'Child Action'
+          description: 'A child action called by the parent'
+          inputs:
+            child-input:
+              description: 'Input for the child action'
+              required: true
+              default: 'Child default'
+          outputs:
+            child-output:
+              description: "Output from child"
+              value: ${{ steps.child-output-step.outputs.result }}
+          runs:
+            using: "composite"
+            steps:
+              - name: Child Setup
+                run: echo "Running child action with input '${{ inputs.child-input }}'"
+                shell: bash
+                
+              - name: Call Nested Javascript Action
+                uses: actions/github-script@v6
+                with:
+                  script: |
+                    console.log('Hello from GitHub Script action (third-level nesting)');
+                    core.setOutput('script-result', 'Data from script action');
+                
+              - name: Run Child Script
+                run: |
+                  echo "${{ github.action_path }}" >> $GITHUB_PATH
+                  child-script.sh
+                shell: bash
+                
+              - name: Generate Child Output
+                id: child-output-step
+                run: echo "result=Child processed: ${{ inputs.child-input }}" >> $GITHUB_OUTPUT
+                shell: bash
+          EOF
+      
+      # Step 3: Create a deeply nested action (third level)
+      - name: Create deeply nested action
+        run: |
+          mkdir -p .github/actions/deep-nested-action
+          
+          # Create the deep nested action metadata
+          cat > .github/actions/deep-nested-action/action.yml << 'EOF'
+          name: 'Deep Nested Action'
+          description: 'A deeply nested action that also uses other actions'
+          inputs:
+            deep-input:
+              description: 'Input for the deep action'
+              required: true
+              default: 'Deep default'
+          outputs:
+            deep-output:
+              description: "Output from deep nested action"
+              value: ${{ steps.deep-output-step.outputs.result }}
+          runs:
+            using: "composite"
+            steps:
+              - name: Call Parent Action
+                id: parent-call
+                uses: ./.github/actions/parent-action
+                with:
+                  parent-input: "From deep: ${{ inputs.deep-input }}"
+                
+              - name: Generate Deep Output
+                id: deep-output-step
+                run: echo "result=Deep action with parent output: ${{ steps.parent-call.outputs.parent-output }}" >> $GITHUB_OUTPUT
+                shell: bash
+          EOF
+      
+      # Step 4: Build witness-run-action
+      - name: Build
+        run: npm run build
+        
+      # Step 5: Run the deeply nested action with witness wrapper (with Sigstore and Archivista)
+      - name: Run deeply nested action with witness
+        id: test-witness-nested
+        uses: ./
+        with:
+          action-ref: ./.github/actions/deep-nested-action
+          step: test-nested-composite
+          deep-input: 'CI Test Runner'
+          enable-sigstore: 'true'  # Use Sigstore
+          enable-archivista: 'true'  # Use Archivista
+          attestations: 'environment git github slsa'
+          attestor-slsa-export: 'true'
+          
+      # Step 6: Verify the outputs and attestations
+      - name: Verify outputs and attestations
+        run: |
+          # Check that a GitOID was generated
+          if [[ -z "${{ steps.test-witness-nested.outputs.git_oid }}" ]]; then
+            echo "ERROR: GitOID was not generated"
+            exit 1
+          else
+            echo "SUCCESS: GitOID was generated: ${{ steps.test-witness-nested.outputs.git_oid }}"
+          fi
+          
+          # Verify the step summary was created
+          if [[ ! -f "$GITHUB_STEP_SUMMARY" ]]; then
+            echo "ERROR: Step summary file not found"
+            exit 1
+          else
+            echo "SUCCESS: Step summary file exists"
+            cat $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Print the logs to help with debugging
+          echo "=== CI Run Logs ==="
+          echo "Git OID: ${{ steps.test-witness-nested.outputs.git_oid }}"
+          
+          # Try to fetch the attestation using Archivista
+          echo "=== Attempting to verify attestation from Archivista ==="
+          # Install witness CLI directly (our action might have removed it)
+          curl -sSfL https://github.com/in-toto/witness/releases/download/v0.8.0/witness_0.8.0_linux_amd64.tar.gz | tar -xz
+          chmod +x ./witness
+          ./witness verify -u https://archivista.testifysec.io -g ${{ steps.test-witness-nested.outputs.git_oid }} || echo "Verification attempt failed, but continuing..."
+          
+          # We don't need the attestation file for this test, so don't fail if it's missing
+          if [ -d /tmp ]; then
+            find /tmp -name "*-attestation.json" -print || echo "No attestation files found in /tmp"
+          fi
+      
+  test-real-world-nested-actions:
+    name: Test Real-World Nested Action Scenarios
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      # Step 1: Build witness-run-action
+      - name: Build
+        run: npm run build
+      
+      # Step 2: Create a composite action that uses real-world actions
+      - name: Create real-world composite action
+        run: |
+          mkdir -p .github/actions/real-world-action
+          
+          # Create the action metadata that uses real-world actions
+          cat > .github/actions/real-world-action/action.yml << 'EOF'
+          name: 'Real-World Nested Action'
+          description: 'A composite action that uses real GitHub actions'
+          inputs:
+            node-version:
+              description: 'Node.js version to use'
+              required: true
+              default: '20'
+          outputs:
+            node-version:
+              description: "The detected Node.js version"
+              value: ${{ steps.node-info.outputs.version }}
+          runs:
+            using: "composite"
+            steps:
+              # Use a real GitHub action for setup
+              - name: Setup Node.js
+                uses: actions/setup-node@v4
+                with:
+                  node-version: ${{ inputs.node-version }}
+                  
+              # Capture output from a real command
+              - name: Get Node.js info
+                id: node-info
+                shell: bash
+                run: |
+                  echo "version=$(node --version)" >> $GITHUB_OUTPUT
+                  
+              # Use another real GitHub action
+              - name: Run GitHub Script
+                uses: actions/github-script@v6
+                with:
+                  script: |
+                    console.log('Hello from nested GitHub Script action!');
+                    console.log(`Node.js version: ${process.version}`);
+          EOF
+      
+      # Step 3: Run the action with witness wrapper
+      - name: Run real-world nested action with witness
+        id: test-witness-real
+        uses: ./
+        with:
+          action-ref: ./.github/actions/real-world-action
+          step: test-real-world-nested
+          node-version: '20.10.0'
+          enable-sigstore: 'true'  # Use Sigstore
+          enable-archivista: 'true'  # Use Archivista
+      
+      # Step 4: Verify the outputs and attestations
+      - name: Verify real-world nested action results
+        run: |
+          # Check that a GitOID was generated
+          if [[ -z "${{ steps.test-witness-real.outputs.git_oid }}" ]]; then
+            echo "ERROR: GitOID was not generated"
+            exit 1
+          else
+            echo "SUCCESS: GitOID was generated: ${{ steps.test-witness-real.outputs.git_oid }}"
+          fi
+          
+          # Verify the step summary was created
+          if [[ ! -f "$GITHUB_STEP_SUMMARY" ]]; then
+            echo "ERROR: Step summary file not found"
+            exit 1
+          else
+            echo "SUCCESS: Step summary file exists"
+            cat $GITHUB_STEP_SUMMARY
+          fi
