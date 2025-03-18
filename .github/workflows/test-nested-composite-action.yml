@@ -146,7 +146,8 @@ jobs:
                 
               - name: Generate Deep Output
                 id: deep-output-step
-                run: echo "result=Deep action with parent output: ${{ steps.parent-call.outputs.parent-output }}" >> $GITHUB_OUTPUT
+                run: |
+                  echo "result=Deep action with parent output: ${{ steps.parent-call.outputs.parent-output }}" >> $GITHUB_OUTPUT
                 shell: bash
           EOF
       
@@ -259,6 +260,7 @@ jobs:
               - name: Run GitHub Script
                 uses: actions/github-script@v6
                 with:
+                  github-token: ${{ github.token }}
                   script: |
                     console.log('Hello from nested GitHub Script action!');
                     console.log(`Node.js version: ${process.version}`);
