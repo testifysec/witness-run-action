@@ -79,7 +79,108 @@ When wrapping an action:
 1. Specify the action reference using `action-ref` in the format `owner/repo@ref`
 2. Pass inputs to the wrapped action using the `input-` prefix
 3. You can also pass inputs directly if they don't conflict with witness-run's own inputs
-4. Currently only JavaScript-based actions are supported
+4. Both JavaScript-based actions and composite actions are supported
+
+## Composite Actions
+
+As of witness-run-action@1.0.0, this action supports running composite actions. This means that you
+can use `witness-run-action` to run a GitHub Action that is defined as a composite action.
+
+For example:
+
+```yaml
+- name: Run Composite Action with Witness
+  uses: testifysec/witness-run-action@main
+  with:
+    step: "run-composite-action"
+    action-ref: "pcolby/hello-world-composite-action@v1.0.0"
+    who-to-greet: "GitHub Actions"
+```
+
+### Nested Composite Actions
+
+Starting from this version, witness-run-action also supports nested composite actions. This means that a composite action can use other actions within its steps using the `uses` keyword. This enables more complex attestation workflows with multi-level action nesting.
+
+#### Supported Formats for Nested Actions
+
+The following formats are supported for referencing actions within composite actions:
+
+1. Public GitHub Actions: `owner/repo@ref` (e.g., `actions/setup-node@v4`)
+2. Local actions: `./path/to/action` (relative to the repository root)
+3. Actions with implicit references: `owner/repo` (defaults to @main)
+
+#### Input/Output Propagation
+
+Nested actions can:
+- Receive inputs from parent actions using `${{ inputs.parameter-name }}`
+- Share outputs between steps using `${{ steps.step-id.outputs.output-name }}`
+- Expose outputs to parent actions
+
+#### Example of a Composite Action with Nested Actions
+
+```yaml
+# In action.yml
+name: 'Nested Action Demo'
+description: 'Demonstrates nested action capabilities'
+inputs:
+  who-to-greet:
+    description: 'Who to greet'
+    required: true
+    default: 'World'
+outputs:
+  node-version:
+    description: 'The detected Node.js version'
+    value: ${{ steps.node-info.outputs.version }}
+runs:
+  using: 'composite'
+  steps:
+    - name: First Step
+      run: echo "First step greeting ${{ inputs.who-to-greet }}"
+      shell: bash
+      
+    - name: Use another action (nested)
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        
+    - name: Get Node.js info
+      id: node-info
+      run: |
+        echo "version=$(node --version)" >> $GITHUB_OUTPUT
+      shell: bash
+        
+    - name: Use GitHub Script (third-level nesting)
+      uses: actions/github-script@v6
+      with:
+        debug: false
+        script: |
+          console.log('Hello from GitHub Script inside a nested action!');
+          
+    - name: Final Step
+      run: echo "Completed with Node ${{ steps.node-info.outputs.version }}"
+      shell: bash
+```
+
+#### Running a Nested Composite Action with Witness
+
+You can run this composite action with witness-run-action using:
+
+```yaml
+- name: Run Nested Composite Action with Witness
+  uses: testifysec/witness-run-action@main
+  with:
+    step: "run-nested-action"
+    action-ref: "owner/nested-action-demo@main"
+    who-to-greet: "GitHub Actions"
+    github-token: ${{ github.token }}  # Pass token for GitHub API operations
+```
+
+#### Important Notes for Nested Actions
+
+1. **Token Passing**: When using actions that require GitHub token access (like `github-script`), be sure to pass the token explicitly
+2. **Path Resolution**: Scripts in composite actions can reference files in the action's directory using `${{ github.action_path }}`
+3. **Debug Flags**: Some actions (like `github-script`) require explicit debug parameters
+4. **Deeply Nested Actions**: The implementation supports multiple levels of action nesting (an action using another action that uses another action)
 
 ## Using Sigstore and Archivista Flags
 This action supports the use of Sigstore and Archivista for creating attestations.

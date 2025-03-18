@@ -1,0 +1,127 @@
+permissions:
+  id-token: write # This is required for requesting the JWT
+  contents: read  # This is required for actions/checkout
+
+name: Test Composite Action Support
+
+on:
+  push:
+    branches: [ feature/composite-actions ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-simple-composite:
+    name: Test Simple Composite Action
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      # Step 1: Create local test composite action
+      - name: Create test composite action
+        run: |
+          mkdir -p .github/actions/test-composite
+          
+          # Create the goodbye.sh script
+          cat > .github/actions/test-composite/goodbye.sh << 'EOF'
+          #!/bin/bash
+          echo "Goodbye from composite action!"
+          EOF
+          chmod +x .github/actions/test-composite/goodbye.sh
+          
+          # Create the composite action metadata (using the real-world example structure)
+          cat > .github/actions/test-composite/action.yml << 'EOF'
+          name: 'Hello World'
+          description: 'Greet someone'
+          inputs:
+            who-to-greet:  # id of input
+              description: 'Who to greet'
+              required: true
+              default: 'World'
+            test-default:
+              description: 'something defaulted'
+              required: true
+              default: 'defaulted'
+            test-optional-given:
+              description: 'something given'
+              required: false
+            testOptionNotGiven:
+              description: 'something missing'
+              required: false
+          outputs:
+            random-number:
+              description: "Random number"
+              value: ${{ steps.random-number-generator.outputs.random-number }}
+          runs:
+            using: "composite"
+            steps:
+              - run: echo Hello '${{ inputs.who-to-greet }}'.
+                shell: bash
+                
+              - id: random-number-generator
+                run: echo "random-number=$(echo $RANDOM)" >> $GITHUB_OUTPUT
+                shell: bash
+                
+              - run: |
+                  echo '<${{ inputs.test-default }}>'
+                  echo "Optional input: '${{ inputs.test-optional-given }}'"
+                shell: bash
+                
+              - run: echo "${{ github.action_path }}" >> $GITHUB_PATH
+                shell: bash
+                
+              - run: goodbye.sh
+                shell: bash
+          EOF
+      
+      # Step 2: Build witness-run-action
+      - name: Build
+        run: npm run build
+        
+      # Step 3: Run the action with the witness wrapper using remote GitHub action
+      - name: Run with witness wrapper
+        id: test-witness
+        uses: ./
+        with:
+          action-ref: pcolby/hello-world-composite-action@main
+          step: test-composite
+          who-to-greet: 'CI Test Runner'
+          test-default: 'Custom default value'
+          test-optional-given: 'This optional input was provided'
+          
+      # Step 4: Verify the outputs and artifacts
+      - name: Verify outputs
+        run: |
+          # Check that a GitOID was generated
+          if [[ -z "${{ steps.test-witness.outputs.git_oid }}" ]]; then
+            echo "ERROR: GitOID was not generated"
+            exit 1
+          else
+            echo "SUCCESS: GitOID was generated: ${{ steps.test-witness.outputs.git_oid }}"
+          fi
+          
+          # Verify the step summary was created
+          if [[ ! -f "$GITHUB_STEP_SUMMARY" ]]; then
+            echo "ERROR: Step summary file not found"
+            exit 1
+          else
+            echo "SUCCESS: Step summary file exists"
+            cat $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Print the logs to help with debugging
+          echo "=== CI Run Logs ==="
+          echo "Git OID: ${{ steps.test-witness.outputs.git_oid }}"
+          
+          # We don't need the attestation file for this test, so don't fail if it's missing
+          if [ -d /tmp ]; then
+            find /tmp -name "*-attestation.json" -print || echo "No attestation files found in /tmp"
+          fi
