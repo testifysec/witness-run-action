@@ -277,10 +277,10 @@ async function runJsActionWithWitness(actionDir, actionConfig, witnessOptions, w
   }
 
   const args = assembleWitnessArgs(witnessOptions, ["node", entryFile]);
-  core.info(`Running witness command: ${witnessExePath}/witness ${args.join(" ")}`);
+  core.info(`Running witness command: ${witnessExePath} ${args.join(" ")}`);
 
   let output = "";
-  await exec.exec(`${witnessExePath}/witness`, args, {
+  await exec.exec(witnessExePath, args, {
     cwd: actionDir,
     env: actionEnv || process.env,
     listeners: {
@@ -484,11 +484,11 @@ async function executeCompositeShellStep(step, actionDir, witnessOptions, witnes
   // Pass the command array directly, no need for regex parsing which could introduce security issues
   const commandArray = shellCommand;
   const args = assembleWitnessArgs(witnessOptions, commandArray);
-  core.info(`Running witness command: ${witnessExePath}/witness ${args.join(" ")}`);
+  core.info(`Running witness command: ${witnessExePath} ${args.join(" ")}`);
 
   let output = "";
   try {
-    await exec.exec(`${witnessExePath}/witness`, args, {
+    await exec.exec(witnessExePath, args, {
       cwd: actionDir,  // Use the action directory as working directory
       env: env,        // Pass the step environment variables
       listeners: {
@@ -518,10 +518,10 @@ async function executeCompositeShellStep(step, actionDir, witnessOptions, witnes
 async function runDirectCommandWithWitness(command, witnessOptions, witnessExePath) {
   const commandArray = command.match(/(?:[^\s"]+|"[^"]*")+/g) || [command];
   const args = assembleWitnessArgs(witnessOptions, commandArray);
-  core.info(`Running witness command: ${witnessExePath}/witness ${args.join(" ")}`);
+  core.info(`Running witness command: ${witnessExePath} ${args.join(" ")}`);
 
   let output = "";
-  await exec.exec(`${witnessExePath}/witness`, args, {
+  await exec.exec(witnessExePath, args, {
     cwd: process.env.GITHUB_WORKSPACE || process.cwd(),
     env: process.env,
     listeners: {
