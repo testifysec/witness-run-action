@@ -792,9 +792,26 @@ async function run() {
     if (actionRef) {
       core.info(`Wrapping GitHub Action: ${actionRef}`);
       const newEnv = getWrappedActionEnv();
-      const actionDir = await downloadAndSetupAction(actionRef);
+      
+      let actionDir;
+      // Handle local action references (./ or ../ format)
+      if (actionRef.startsWith('./') || actionRef.startsWith('../')) {
+        core.info(`Using local action reference: ${actionRef}`);
+        actionDir = path.resolve(process.cwd(), actionRef);
+        core.info(`Resolved local action directory: ${actionDir}`);
+      } else {
+        // For owner/repo@ref format
+        core.info(`Downloading remote action: ${actionRef}`);
+        actionDir = await downloadAndSetupAction(actionRef);
+        core.info(`Downloaded action to: ${actionDir}`);
+      }
+      
       output = await runActionWithWitness(actionDir, witnessOptions, witnessExePath, newEnv);
-      cleanUpDirectory(actionDir);
+      
+      // Only clean up directory if it was a downloaded action
+      if (!actionRef.startsWith('./') && !actionRef.startsWith('../')) {
+        cleanUpDirectory(actionDir);
+      }
     } else if (command) {
       core.info(`Running command: ${command}`);
       output = await runDirectCommandWithWitness(command, witnessOptions, witnessExePath);
