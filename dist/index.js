@@ -34780,7 +34780,7 @@ function getWrappedActionEnv() {
   
   // Debug: Log existing environment variables that might be relevant
   core.info('Debug: Environment variables in getWrappedActionEnv:');
-  ['GITHUB_TOKEN', 'INPUT_GITHUB_TOKEN', 'INPUT_GITHUB-TOKEN'].forEach(key => {
+  ['GITHUB_TOKEN', 'INPUT_GITHUB_TOKEN', 'INPUT_GITHUB-TOKEN', 'INPUT_TOKEN'].forEach(key => {
     if (process.env[key]) {
       core.info(`  ${key} is defined`);
     }
@@ -34825,13 +34825,28 @@ async function executeCompositeUsesStep(step, parentActionDir, witnessOptions, w
           const key = `steps.${stepId}.outputs.${outputName}`;
           return stepOutputs[key] || '';
         });
+        
+        // Handle expressions like ${{ inputs.name }}
+        processedValue = processedValue.replace(/\$\{\{\s*inputs\.([a-zA-Z0-9_-]+)\s*\}\}/g, (match, inputParam) => {
+          const inputEnvVar = `INPUT_${inputParam.replace(/-/g, '_').toUpperCase()}`;
+          const value = parentEnv[inputEnvVar] || '';
+          core.info(`Replacing input expression inputs.${inputParam} with value: ${value}`);
+          return value;
+        });
       }
       
       const inputKey = `INPUT_${inputName.replace(/-/g, '_').toUpperCase()}`;
       nestedEnv[inputKey] = processedValue;
       core.info(`Setting nested action input: ${inputName}=${processedValue}`);
+      
+      // Just add debug logging about what keys we're setting
+      core.info(`Debug: Added env var '${inputKey}' with value type '${typeof processedValue}'`);
     }
   }
+  
+  // Debug: Log information about GITHUB_TOKEN in the environment
+  core.info(`Debug: GITHUB_TOKEN in parent env: ${!!parentEnv.GITHUB_TOKEN}`);
+  core.info(`Debug: GITHUB_TOKEN in nested env: ${!!nestedEnv.GITHUB_TOKEN}`);
   
   // Determine action type and resolve location
   let actionDir;

@@ -62,7 +62,8 @@ jobs:
                 
               - name: Generate Parent Output
                 id: output-step
-                run: echo "result=Parent output with child data: ${{ steps.child-action.outputs.child-output }}" >> $GITHUB_OUTPUT
+                run: |
+                  echo "result=Parent output with child data: ${{ steps.child-action.outputs.child-output }}" >> $GITHUB_OUTPUT
                 shell: bash
           EOF
       
@@ -142,7 +143,7 @@ jobs:
                 id: parent-call
                 uses: ./.github/actions/parent-action
                 with:
-                  parent-input: "From deep: ${{ inputs.deep-input }}"
+                  parent-input: "From deep: CI Test Runner"
                 
               - name: Generate Deep Output
                 id: deep-output-step
@@ -263,9 +264,15 @@ jobs:
                 uses: actions/github-script@v6
                 with:
                   github-token: ${{ github.token }}
+                  # For action-runner compatibility
+                  token: ${{ github.token }}
                   script: |
-                    // Using environment variable for debugging
-                    process.env.GITHUB_TOKEN = process.env.INPUT_GITHUB_TOKEN || '';
+                    // Debug logging for troubleshooting
+                    console.log('Environment variables in github-script:');
+                    console.log(`GITHUB_TOKEN: ${process.env.GITHUB_TOKEN ? 'defined' : 'undefined'}`);
+                    console.log(`INPUT_GITHUB_TOKEN: ${process.env.INPUT_GITHUB_TOKEN ? 'defined' : 'undefined'}`);
+                    console.log(`INPUT_TOKEN: ${process.env.INPUT_TOKEN ? 'defined' : 'undefined'}`);
+                    console.log(`github.token: ${github.token ? 'defined' : 'undefined'}`);
                     console.log('Hello from nested GitHub Script action!');
                     console.log(`Node.js version: ${process.version}`);
           EOF
