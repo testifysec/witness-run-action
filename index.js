@@ -9,6 +9,7 @@ const yaml = require("js-yaml");
 /**
  * Downloads and sets up the witness binary.
  * Checks for a cached version first; if not found, downloads, extracts, caches, and returns its path.
+ * Returns the full path to the witness executable, not just the directory.
  */
 async function downloadAndSetupWitness() {
   const witnessInstallDir = core.getInput("witness-install-dir") || "./";
@@ -20,7 +21,7 @@ async function downloadAndSetupWitness() {
     const witnessExePath = path.join(cachedDir, "witness");
     console.log(`Found cached witness at: ${witnessExePath}`);
     core.addPath(cachedDir);
-    return path.resolve(witnessExePath);
+    return witnessExePath;  // Return the full path to the executable
   }
 
   // Construct download URL based on OS
@@ -60,7 +61,14 @@ async function downloadAndSetupWitness() {
   core.addPath(path.dirname(cachedPath));
   console.log(`Debug: Added cached directory to PATH: ${path.dirname(cachedPath)}`);
 
-  return path.resolve(cachedPath);
+  // Verify that the returned path includes the executable name
+  if (!cachedPath.endsWith('witness')) {
+    const fullPath = path.join(cachedPath, 'witness');
+    console.log(`Debug: Adding executable name to path: ${fullPath}`);
+    return fullPath;
+  }
+
+  return cachedPath;
 }
 
 /**
