@@ -167,6 +167,8 @@ jobs:
           enable-archivista: 'true'  # Use Archivista
           attestations: 'environment git github slsa'
           attestor-slsa-export: 'true'
+          # Pass GitHub token for nested actions that require it
+          github-token: ${{ github.token }}
           
       # Step 6: Verify the outputs and attestations
       - name: Verify outputs and attestations
@@ -257,11 +259,13 @@ jobs:
                   echo "version=$(node --version)" >> $GITHUB_OUTPUT
                   
               # Use another real GitHub action
-              - name: Run GitHub Script
+              - name: Run GitHub Script 
                 uses: actions/github-script@v6
                 with:
                   github-token: ${{ github.token }}
                   script: |
+                    // Using environment variable for debugging
+                    process.env.GITHUB_TOKEN = process.env.INPUT_GITHUB_TOKEN || '';
                     console.log('Hello from nested GitHub Script action!');
                     console.log(`Node.js version: ${process.version}`);
           EOF
@@ -276,6 +280,8 @@ jobs:
           node-version: '20.10.0'
           enable-sigstore: 'true'  # Use Sigstore
           enable-archivista: 'true'  # Use Archivista
+          # Pass GitHub token for nested actions that require it
+          github-token: ${{ github.token }}
       
       # Step 4: Verify the outputs and attestations
       - name: Verify real-world nested action results

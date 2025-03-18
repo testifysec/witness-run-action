@@ -34777,6 +34777,14 @@ function getWrappedActionEnv() {
       "workingdir", "action-ref"
     ].map(name => name.toLowerCase())
   );
+  
+  // Debug: Log existing environment variables that might be relevant
+  core.info('Debug: Environment variables in getWrappedActionEnv:');
+  ['GITHUB_TOKEN', 'INPUT_GITHUB_TOKEN', 'INPUT_GITHUB-TOKEN'].forEach(key => {
+    if (process.env[key]) {
+      core.info(`  ${key} is defined`);
+    }
+  });
 
   for (const key in process.env) {
     const match = key.match(/^INPUT_(.+)$/);
@@ -34829,13 +34837,78 @@ async function executeCompositeUsesStep(step, parentActionDir, witnessOptions, w
   let actionDir;
   let actionReference = step.uses;
   
-  // Handle local action reference (./ format)
-  if (actionReference.startsWith('./')) {
+  // Handle local action reference (./ or ../ format)
+  if (actionReference.startsWith('./') || actionReference.startsWith('../')) {
     core.info(`Resolving local action reference: ${actionReference}`);
+    core.info(`Parent action directory: ${parentActionDir}`);
     
-    // Adjust path to be relative to the parent action
-    actionDir = path.resolve(parentActionDir, actionReference);
-    core.info(`Resolved local action directory: ${actionDir}`);
+    // Log working directory and GITHUB_WORKSPACE
+    core.info(`Current working directory: ${process.cwd()}`);
+    core.info(`GITHUB_WORKSPACE: ${process.env.GITHUB_WORKSPACE || 'not set'}`);
+    
+    // First, try resolving path relative to parent action
+    const actionDirFromParent = path.resolve(parentActionDir, actionReference);
+    core.info(`Checking if action exists at path relative to parent: ${actionDirFromParent}`);
+    
+    const hasActionYml = fs.existsSync(path.join(actionDirFromParent, 'action.yml'));
+    const hasActionYaml = fs.existsSync(path.join(actionDirFromParent, 'action.yaml'));
+    core.info(`action.yml exists at parent-relative path: ${hasActionYml}`);
+    core.info(`action.yaml exists at parent-relative path: ${hasActionYaml}`);
+    
+    if (hasActionYml || hasActionYaml) {
+      actionDir = actionDirFromParent;
+      core.info(`Resolved local action directory (relative to parent): ${actionDir}`);
+    } else {
+      // If not found, try resolving from workspace root
+      const workspaceDir = process.env.GITHUB_WORKSPACE || process.cwd();
+      
+      // Try with and without the leading ./
+      const pathWithoutDot = actionReference.replace(/^\.\//, '');
+      core.info(`Trying workspace-relative path without leading ./: ${pathWithoutDot}`);
+      
+      const actionDirFromWorkspace = path.resolve(workspaceDir, pathWithoutDot);
+      core.info(`Checking if action exists at path relative to workspace: ${actionDirFromWorkspace}`);
+      
+      const wsHasActionYml = fs.existsSync(path.join(actionDirFromWorkspace, 'action.yml'));
+      const wsHasActionYaml = fs.existsSync(path.join(actionDirFromWorkspace, 'action.yaml'));
+      core.info(`action.yml exists at workspace-relative path: ${wsHasActionYml}`);
+      core.info(`action.yaml exists at workspace-relative path: ${wsHasActionYaml}`);
+      
+      if (wsHasActionYml || wsHasActionYaml) {
+        actionDir = actionDirFromWorkspace;
+        core.info(`Resolved local action directory (relative to workspace): ${actionDir}`);
+      } else {
+        // If still not found, list the directories to help debug
+        core.info(`Failed to find action at either parent-relative or workspace-relative paths. Directory listings:`);
+        try {
+          if (fs.existsSync(path.dirname(actionDirFromParent))) {
+            core.info(`Contents of ${path.dirname(actionDirFromParent)}:`);
+            core.info(JSON.stringify(fs.readdirSync(path.dirname(actionDirFromParent))));
+          }
+          
+          if (fs.existsSync(path.dirname(actionDirFromWorkspace))) {
+            core.info(`Contents of ${path.dirname(actionDirFromWorkspace)}:`);
+            core.info(JSON.stringify(fs.readdirSync(path.dirname(actionDirFromWorkspace))));
+          }
+          
+          if (fs.existsSync(workspaceDir)) {
+            core.info(`Contents of workspace ${workspaceDir}:`);
+            core.info(JSON.stringify(fs.readdirSync(workspaceDir)));
+            
+            // Check .github/actions directory specifically
+            const githubActionsDir = path.join(workspaceDir, '.github', 'actions');
+            if (fs.existsSync(githubActionsDir)) {
+              core.info(`Contents of ${githubActionsDir}:`);
+              core.info(JSON.stringify(fs.readdirSync(githubActionsDir)));
+            }
+          }
+        } catch (error) {
+          core.info(`Error listing directories: ${error.message}`);
+        }
+        
+        throw new Error(`Could not find action at ${actionReference} (tried both relative to parent action and workspace root)`);
+      }
+    }
   } 
   // Handle GitHub-hosted action (owner/repo@ref format)
   else if (actionReference.includes('@')) {
@@ -35000,8 +35073,61 @@ async function run() {
       // Handle local action references (./ or ../ format)
       if (actionRef.startsWith('./') || actionRef.startsWith('../')) {
         core.info(`Using local action reference: ${actionRef}`);
-        actionDir = path.resolve(process.cwd(), actionRef);
-        core.info(`Resolved local action directory: ${actionDir}`);
+        
+        // Log working directory and GITHUB_WORKSPACE for debugging
+        core.info(`Current working directory: ${process.cwd()}`);
+        core.info(`GITHUB_WORKSPACE: ${process.env.GITHUB_WORKSPACE || 'not set'}`);
+        
+        const workspaceDir = process.env.GITHUB_WORKSPACE || process.cwd();
+        
+        // Try with and without leading ./
+        const pathWithoutDot = actionRef.replace(/^\.\//, '');
+        core.info(`Trying to resolve path without leading ./: ${pathWithoutDot}`);
+        
+        const actionDirPath = path.resolve(workspaceDir, pathWithoutDot);
+        core.info(`Fully resolved action path: ${actionDirPath}`);
+        
+        const hasActionYml = fs.existsSync(path.join(actionDirPath, 'action.yml'));
+        const hasActionYaml = fs.existsSync(path.join(actionDirPath, 'action.yaml'));
+        
+        core.info(`action.yml exists: ${hasActionYml}`);
+        core.info(`action.yaml exists: ${hasActionYaml}`);
+        
+        if (hasActionYml || hasActionYaml) {
+          actionDir = actionDirPath;
+          core.info(`Resolved local action directory: ${actionDir}`);
+        } else {
+          // If we couldn't find it, let's list directories to help debug
+          core.info(`Failed to locate action. Directory listings for debugging:`);
+          
+          try {
+            // List the expected parent directory
+            const parentDir = path.dirname(actionDirPath);
+            if (fs.existsSync(parentDir)) {
+              core.info(`Contents of ${parentDir}:`);
+              core.info(JSON.stringify(fs.readdirSync(parentDir)));
+            } else {
+              core.info(`Parent directory ${parentDir} does not exist`);
+            }
+            
+            // List the workspace root
+            core.info(`Contents of workspace ${workspaceDir}:`);
+            core.info(JSON.stringify(fs.readdirSync(workspaceDir)));
+            
+            // Check if .github/actions exists and list it
+            const githubActionsDir = path.join(workspaceDir, '.github', 'actions');
+            if (fs.existsSync(githubActionsDir)) {
+              core.info(`Contents of ${githubActionsDir}:`);
+              core.info(JSON.stringify(fs.readdirSync(githubActionsDir)));
+            } else {
+              core.info(`${githubActionsDir} directory does not exist`);
+            }
+          } catch (error) {
+            core.info(`Error listing directories: ${error.message}`);
+          }
+          
+          throw new Error(`Could not find action at ${actionRef} (looking in ${actionDirPath})`);
+        }
       } else {
         // For owner/repo@ref format
         core.info(`Downloading remote action: ${actionRef}`);
