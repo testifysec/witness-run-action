@@ -105,6 +105,7 @@ jobs:
                   script: |
                     console.log('Hello from GitHub Script action (third-level nesting)');
                     core.setOutput('script-result', 'Data from script action');
+                  debug: false
                 
               - name: Run Child Script
                 run: |
@@ -267,6 +268,7 @@ jobs:
                   github-token: ${{ github.token }}
                   # For action-runner compatibility
                   token: ${{ github.token }}
+                  debug: false
                   script: |
                     // Debug logging for troubleshooting
                     console.log('Environment variables in github-script:');
