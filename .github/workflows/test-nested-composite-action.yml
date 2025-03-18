@@ -114,7 +114,8 @@ jobs:
                 
               - name: Generate Child Output
                 id: child-output-step
-                run: echo "result=Child processed: ${{ inputs.child-input }}" >> $GITHUB_OUTPUT
+                run: |
+                  echo "result=Child processed: ${{ inputs.child-input }}" >> $GITHUB_OUTPUT
                 shell: bash
           EOF
       
