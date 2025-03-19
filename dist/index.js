@@ -32563,8 +32563,19 @@ async function runDockerActionWithWitness(actionDir, actionConfig, witnessOption
     dockerImage = await docker.buildImage(dockerfilePath, uniqueTag, actionDir);
   } else if (image.startsWith('docker://')) {
     // This is a pre-built Docker image with the docker:// protocol prefix
-    core.info(`Using pre-built Docker image: ${image}`);
-    dockerImage = await docker.pullImage(image);
+    const imageWithoutPrefix = image.replace(/^docker:\/\//, '');
+    core.info(`Using pre-built Docker image: ${imageWithoutPrefix}`);
+    
+    // Pull the image
+    try {
+      core.info(`Pulling Docker image: ${imageWithoutPrefix}`);
+      await exec.exec('docker', ['pull', imageWithoutPrefix]);
+      dockerImage = imageWithoutPrefix;
+    } catch (error) {
+      core.warning(`Error pulling Docker image: ${error.message}`);
+      // Fall back to using the image directly in case it's already available locally
+      dockerImage = imageWithoutPrefix;
+    }
   } else {
     // Assume this is a regular Docker image name without protocol prefix
     core.info(`Using Docker image: ${image}`);
@@ -33692,7 +33703,18 @@ class WitnessActionRunner {
     // Check if this is a direct Docker image reference
     if (actionRef.startsWith('docker://')) {
       core.info(`Executing Docker command for direct image reference: ${actionRef}`);
-      return this.executeDockerImageCommand(actionRef);
+      
+      // For direct Docker image references, we're using a command-based approach
+      // This is treated as a "command" execution rather than an "action" execution
+      const dockerImage = actionRef.replace(/^docker:\/\//, '');
+      const command = core.getInput('command') || `echo "Running ${dockerImage} container"`;
+      
+      // Build the Docker command
+      const dockerCommand = `docker run --rm -v "${process.env.GITHUB_WORKSPACE || process.cwd()}:/github/workspace" -w /github/workspace ${dockerImage} /bin/sh -c "${command}"`;
+      core.info(`Converted direct Docker image reference to command: ${dockerCommand}`);
+      
+      // Execute as a direct command
+      return await this.executeCommand(dockerCommand);
     }
     
     // Determine action directory - local or remote
@@ -33722,63 +33744,6 @@ class WitnessActionRunner {
         cleanUpDirectory(this.actionDir);
       }
     }
-  }
-  
-  /**
-   * Executes a direct Docker image as a command with Witness
-   */
-  async executeDockerImageCommand(dockerImageRef) {
-    core.info(`Running direct Docker image: ${dockerImageRef}`);
-    
-    // Get the Docker image name by removing the docker:// prefix
-    const dockerImage = dockerImageRef.replace(/^docker:\/\//, '');
-    
-    // Get any command that was provided
-    const command = core.getInput('command');
-    
-    // Prepare the Docker command to run the image
-    let dockerCommand = `docker run --rm`;
-    
-    // Set up the environment variables for the Docker container
-    const env = this.getWrappedActionEnv();
-    for (const [key, value] of Object.entries(env)) {
-      if (key.startsWith('INPUT_') && value !== undefined && value !== null) {
-        dockerCommand += ` -e ${key}=${value}`;
-      }
-    }
-    
-    // Add workspace volume if available
-    if (process.env.GITHUB_WORKSPACE) {
-      dockerCommand += ` -v ${process.env.GITHUB_WORKSPACE}:/github/workspace`;
-      dockerCommand += ` -w /github/workspace`;
-    }
-    
-    // Add the Docker image
-    dockerCommand += ` ${dockerImage}`;
-    
-    // Add the command if specified
-    if (command) {
-      dockerCommand += ` /bin/sh -c "${command}"`;
-    }
-    
-    core.info(`Executing Docker command: ${dockerCommand}`);
-    
-    // Create a copy of witness options with signing disabled
-    const witnessDockerOptions = { ...this.witnessOptions };
-    
-    // Ensure signing is disabled since we're not running in a Git context
-    // This prevents the "failed to load signers" error when running direct Docker commands
-    witnessDockerOptions.enableSigstore = false;
-    witnessDockerOptions.enableArchivista = false;
-    
-    core.info(`Disabling signers for direct Docker image command`);
-    
-    // Run the Docker command with witness and modified options
-    return await runDirectCommandWithWitness(
-      dockerCommand,
-      witnessDockerOptions,
-      this.witnessExePath
-    );
   }
   
   /**

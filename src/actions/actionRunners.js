@@ -263,8 +263,19 @@ async function runDockerActionWithWitness(actionDir, actionConfig, witnessOption
     dockerImage = await docker.buildImage(dockerfilePath, uniqueTag, actionDir);
   } else if (image.startsWith('docker://')) {
     // This is a pre-built Docker image with the docker:// protocol prefix
-    core.info(`Using pre-built Docker image: ${image}`);
-    dockerImage = await docker.pullImage(image);
+    const imageWithoutPrefix = image.replace(/^docker:\/\//, '');
+    core.info(`Using pre-built Docker image: ${imageWithoutPrefix}`);
+    
+    // Pull the image
+    try {
+      core.info(`Pulling Docker image: ${imageWithoutPrefix}`);
+      await exec.exec('docker', ['pull', imageWithoutPrefix]);
+      dockerImage = imageWithoutPrefix;
+    } catch (error) {
+      core.warning(`Error pulling Docker image: ${error.message}`);
+      // Fall back to using the image directly in case it's already available locally
+      dockerImage = imageWithoutPrefix;
+    }
   } else {
     // Assume this is a regular Docker image name without protocol prefix
     core.info(`Using Docker image: ${image}`);
