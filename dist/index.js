@@ -33315,19 +33315,32 @@ function assembleWitnessArgs(witnessOptions, extraArgs = []) {
     cmd.push(`--signer-fulcio-url=${sigstoreFulcio}`);
     cmd.push(`--signer-fulcio-oidc-client-id=${sigstoreClientId}`);
     cmd.push(`--signer-fulcio-oidc-issuer=${sigstoreOidcIssuer}`);
+    
+    // For CI environments where id-token is available, set the right parameters
+    if (process.env.ACTIONS_ID_TOKEN_REQUEST_URL && process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN) {
+      cmd.push('--signer-oidc-disable-ambient');
+      cmd.push('--signer-oidc-use-token-trust=true');
+    }
+    
     sigstoreTimestampServers.split(" ").forEach((ts) => {
       ts = ts.trim();
       if (ts.length > 0) {
         cmd.push(`--timestamp-servers=${ts}`);
       }
     });
-  } else if (timestampServers) {
-    timestampServers.split(" ").forEach((ts) => {
-      ts = ts.trim();
-      if (ts.length > 0) {
-        cmd.push(`--timestamp-servers=${ts}`);
-      }
-    });
+  } else {
+    // Always add a signers-no-verification flag to allow running without signers
+    cmd.push('--signers-no-verification=true');
+    
+    // Add timestamp servers if provided
+    if (timestampServers) {
+      timestampServers.split(" ").forEach((ts) => {
+        ts = ts.trim();
+        if (ts.length > 0) {
+          cmd.push(`--timestamp-servers=${ts}`);
+        }
+      });
+    }
   }
   
   if (attestations && attestations.length) {

@@ -2,6 +2,7 @@ permissions:
   id-token: write # This is required for requesting the JWT
   contents: read  # This is required for actions/checkout
 
+
 name: Test Docker Action Support
 
 on:
@@ -87,8 +88,8 @@ jobs:
           action-ref: ./.github/actions/test-docker
           step: test-dockerfile-action
           who-to-greet: 'CI Test Runner'
-          enable-sigstore: false
-          enable-archivista: false
+          enable-sigstore: true
+          enable-archivista: true
           
       # Step 4: Verify the outputs
       - name: Verify Dockerfile action outputs
