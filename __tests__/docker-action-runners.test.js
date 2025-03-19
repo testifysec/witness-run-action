@@ -41,14 +41,7 @@ jest.mock('os', () => ({
 const mockAssembleWitnessArgs = jest.fn().mockReturnValue(['--mock-witness-arg1', '--mock-witness-arg2']);
 jest.mock('../src/attestation/assembleWitnessArgs', () => mockAssembleWitnessArgs);
 
-// Import the function we want to test (this is just a placeholder until we implement it)
-jest.mock('../src/actions/actionRunners', () => {
-  const actual = jest.requireActual('../src/actions/actionRunners');
-  return {
-    ...actual,
-    runDockerActionWithWitness: jest.fn()
-  };
-});
+// Import the function we want to test
 const { runDockerActionWithWitness } = require('../src/actions/actionRunners');
 
 describe('Docker Action Runner Tests', () => {
@@ -93,19 +86,23 @@ describe('Docker Action Runner Tests', () => {
       
       // Mock successful Docker build and run
       mockExec.exec.mockImplementation(async (cmd, args, options) => {
-        if (args.includes('build')) {
+        if (cmd === 'docker' && args.includes('--version')) {
+          return 0; // Docker is installed
+        } else if (cmd === 'docker' && args.includes('build')) {
           return 0; // Docker build succeeds
-        } else if (args.includes('run')) {
+        } else if (cmd === 'docker' && args.includes('run')) {
           if (options && options.listeners && options.listeners.stdout) {
             options.listeners.stdout(Buffer.from('Docker container output'));
           }
           return 0; // Docker run succeeds
+        } else if (cmd === witnessExePath) {
+          if (options && options.listeners && options.listeners.stdout) {
+            options.listeners.stdout(Buffer.from('Witness output with Docker container output'));
+          }
+          return 0; // Witness command succeeds
         }
-        return 1; // Other commands fail
+        return 0; // Default case
       });
-      
-      // Placeholder for when we implement the function
-      runDockerActionWithWitness.mockResolvedValueOnce('Docker action output');
       
       // Call the function
       const result = await runDockerActionWithWitness(
@@ -116,8 +113,27 @@ describe('Docker Action Runner Tests', () => {
         actionEnv
       );
       
-      // Very basic verification for now
-      expect(result).toBe('Docker action output');
+      // Verify Docker commands were called
+      expect(mockExec.exec).toHaveBeenCalled();
+      
+      // Verify Docker build was called with correct args by checking mock arguments
+      expect(mockAssembleWitnessArgs).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.arrayContaining([
+          'docker',
+          'run',
+          expect.stringMatching(/github-action-\d+-[a-z0-9]+/)  // Verify image name format
+        ])
+      );
+      
+      // Check that witness was called correctly
+      expect(mockExec.exec).toHaveBeenCalledWith(
+        witnessExePath,
+        expect.arrayContaining(['--mock-witness-arg1']),
+        expect.objectContaining({
+          cwd: actionDir
+        })
+      );
       
       // In the real implementation, we would expect to see docker commands being executed
       // expect(mockExec.exec).toHaveBeenCalledWith(
@@ -151,19 +167,23 @@ describe('Docker Action Runner Tests', () => {
       
       // Mock successful Docker pull and run
       mockExec.exec.mockImplementation(async (cmd, args, options) => {
-        if (args.includes('pull')) {
+        if (cmd === 'docker' && args.includes('--version')) {
+          return 0; // Docker is installed
+        } else if (cmd === 'docker' && args.includes('pull')) {
           return 0; // Docker pull succeeds
-        } else if (args.includes('run')) {
+        } else if (cmd === 'docker' && args.includes('run')) {
           if (options && options.listeners && options.listeners.stdout) {
             options.listeners.stdout(Buffer.from('Docker container output'));
           }
           return 0; // Docker run succeeds
+        } else if (cmd === witnessExePath) {
+          if (options && options.listeners && options.listeners.stdout) {
+            options.listeners.stdout(Buffer.from('Witness output with Docker container output'));
+          }
+          return 0; // Witness command succeeds
         }
-        return 1; // Other commands fail
+        return 0; // Default case
       });
-      
-      // Placeholder for when we implement the function
-      runDockerActionWithWitness.mockResolvedValueOnce('Docker action output');
       
       // Call the function
       const result = await runDockerActionWithWitness(
@@ -174,8 +194,35 @@ describe('Docker Action Runner Tests', () => {
         actionEnv
       );
       
-      // Very basic verification for now
-      expect(result).toBe('Docker action output');
+      // Verify Docker commands were called
+      expect(mockExec.exec).toHaveBeenCalled();
+      
+      // Verify Docker pull was called with correct args by checking mock arguments
+      expect(mockAssembleWitnessArgs).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.arrayContaining([
+          'docker',
+          'run',
+          'alpine:latest'  // Should use the correct image name
+        ])
+      );
+      
+      // Verify entrypoint was set correctly
+      expect(mockAssembleWitnessArgs).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.arrayContaining([
+          '--entrypoint', '/entrypoint.sh'
+        ])
+      );
+      
+      // Check that witness was called correctly
+      expect(mockExec.exec).toHaveBeenCalledWith(
+        witnessExePath,
+        expect.arrayContaining(['--mock-witness-arg1']),
+        expect.objectContaining({
+          cwd: actionDir
+        })
+      );
       
       // In the real implementation, we would expect to see docker commands being executed
       // expect(mockExec.exec).toHaveBeenCalledWith(
@@ -205,9 +252,6 @@ describe('Docker Action Runner Tests', () => {
       // Mock error when checking Docker version
       mockExec.exec.mockRejectedValueOnce(new Error('Docker not found'));
       
-      // Placeholder for when we implement the function
-      runDockerActionWithWitness.mockRejectedValueOnce(new Error('Docker is not installed or not in the PATH'));
-      
       // Call the function and expect an error
       await expect(runDockerActionWithWitness(
         actionDir, 
@@ -231,14 +275,13 @@ describe('Docker Action Runner Tests', () => {
       
       // Mock Docker build failure
       mockExec.exec.mockImplementation(async (cmd, args, options) => {
-        if (args.includes('build')) {
+        if (cmd === 'docker' && args.includes('--version')) {
+          return 0; // Docker is installed
+        } else if (cmd === 'docker' && args.includes('build')) {
           throw new Error('Docker build failed');
         }
         return 0;
       });
-      
-      // Placeholder for when we implement the function
-      runDockerActionWithWitness.mockRejectedValueOnce(new Error('Failed to build Docker image: Docker build failed'));
       
       // Call the function and expect an error
       await expect(runDockerActionWithWitness(
@@ -261,18 +304,18 @@ describe('Docker Action Runner Tests', () => {
       const witnessOptions = { step: 'test-step' };
       const witnessExePath = '/path/to/witness';
       
-      // Mock Docker run failure
+      // Mock Docker run failure - this will fail when witness tries to execute with docker
       mockExec.exec.mockImplementation(async (cmd, args, options) => {
-        if (args.includes('build')) {
+        if (cmd === 'docker' && args.includes('--version')) {
+          return 0; // Docker is installed
+        } else if (cmd === 'docker' && args.includes('build')) {
           return 0; // Build succeeds
-        } else if (args.includes('run')) {
+        } else if (cmd === witnessExePath) {
+          // When witness tries to run docker, it will fail
           throw new Error('Docker run failed');
         }
         return 0;
       });
-      
-      // Placeholder for when we implement the function
-      runDockerActionWithWitness.mockRejectedValueOnce(new Error('Failed to run Docker container: Docker run failed'));
       
       // Call the function and expect an error
       await expect(runDockerActionWithWitness(
@@ -280,7 +323,7 @@ describe('Docker Action Runner Tests', () => {
         actionConfig, 
         witnessOptions, 
         witnessExePath
-      )).rejects.toThrow('Failed to run Docker container: Docker run failed');
+      )).rejects.toThrow('Docker run failed');
     });
 
     test('should handle inputs and environment variables correctly', async () => {
@@ -314,8 +357,20 @@ describe('Docker Action Runner Tests', () => {
         GITHUB_WORKSPACE: '/github/workspace'
       };
       
-      // Placeholder for when we implement the function
-      runDockerActionWithWitness.mockResolvedValueOnce('Docker action output');
+      // Mock Docker commands
+      mockExec.exec.mockImplementation(async (cmd, args, options) => {
+        if (cmd === 'docker' && args.includes('--version')) {
+          return 0; // Docker is installed
+        } else if (cmd === 'docker' && args.includes('build')) {
+          return 0; // Docker build succeeds
+        } else if (cmd === witnessExePath) {
+          if (options && options.listeners && options.listeners.stdout) {
+            options.listeners.stdout(Buffer.from('Witness output with Docker container output'));
+          }
+          return 0; // Witness command succeeds
+        }
+        return 0; // Default case
+      });
       
       // Call the function
       const result = await runDockerActionWithWitness(
@@ -326,8 +381,16 @@ describe('Docker Action Runner Tests', () => {
         actionEnv
       );
       
-      // Very basic verification for now
-      expect(result).toBe('Docker action output');
+      // Verify that witness was called with proper args
+      expect(mockExec.exec).toHaveBeenCalledWith(
+        witnessExePath,
+        expect.arrayContaining(['--mock-witness-arg1']),
+        expect.objectContaining({
+          env: expect.objectContaining({
+            INPUT_INPUT2: 'input-value2'
+          })
+        })
+      );
       
       // In the real implementation, we would expect the docker run command to have the correct env variables
       // expect(mockExec.exec).toHaveBeenCalledWith(
@@ -362,8 +425,13 @@ describe('Docker Action Runner Tests', () => {
       const witnessExePath = '/path/to/witness';
       const actionEnv = {}; // Missing required input
       
-      // Placeholder for when we implement the function
-      runDockerActionWithWitness.mockRejectedValueOnce(new Error('Required input \'required-input\' was not provided'));
+      // Mock Docker commands
+      mockExec.exec.mockImplementation(async (cmd, args, options) => {
+        if (cmd === 'docker' && args.includes('--version')) {
+          return 0; // Docker is installed
+        }
+        return 0;
+      });
       
       // Call the function and expect an error
       await expect(runDockerActionWithWitness(
@@ -395,8 +463,20 @@ describe('Docker Action Runner Tests', () => {
       const witnessExePath = '/path/to/witness';
       const actionEnv = { GITHUB_WORKSPACE: '/github/workspace' };
       
-      // Placeholder for when we implement the function
-      runDockerActionWithWitness.mockResolvedValueOnce('Docker action output');
+      // Mock Docker commands
+      mockExec.exec.mockImplementation(async (cmd, args, options) => {
+        if (cmd === 'docker' && args.includes('--version')) {
+          return 0; // Docker is installed
+        } else if (cmd === 'docker' && args.includes('build')) {
+          return 0; // Docker build succeeds
+        } else if (cmd === witnessExePath) {
+          if (options && options.listeners && options.listeners.stdout) {
+            options.listeners.stdout(Buffer.from('Witness output with Docker container output'));
+          }
+          return 0; // Witness command succeeds
+        }
+        return 0; // Default case
+      });
       
       // Call the function
       const result = await runDockerActionWithWitness(
@@ -407,8 +487,23 @@ describe('Docker Action Runner Tests', () => {
         actionEnv
       );
       
-      // Very basic verification for now
-      expect(result).toBe('Docker action output');
+      // Verify Docker commands were executed correctly
+      expect(mockAssembleWitnessArgs).toHaveBeenCalledWith(
+        witnessOptions,
+        expect.arrayContaining([
+          'docker',
+          'run',
+          '--entrypoint', '/custom-entrypoint.sh'
+        ])
+      );
+      
+      // Verify args were properly processed
+      expect(mockAssembleWitnessArgs).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.arrayContaining([
+          'arg1', 'input-value1', 'arg3'
+        ])
+      );
       
       // In the real implementation, we would expect to see docker commands with the correct entrypoint and args
       // expect(mockExec.exec).toHaveBeenCalledWith(
