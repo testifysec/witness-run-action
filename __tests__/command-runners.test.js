@@ -83,7 +83,10 @@ const mockRunCompositeActionWithWitness = jest.fn().mockImplementation(
 
 jest.mock('../src/actions/actionRunners', () => ({
   runJsActionWithWitness: mockRunJsActionWithWitness,
-  runCompositeActionWithWitness: mockRunCompositeActionWithWitness
+  runCompositeActionWithWitness: mockRunCompositeActionWithWitness,
+  runDockerActionWithWitness: jest.fn().mockImplementation(() => {
+    throw new Error('Docker-based actions are not yet supported');
+  })
 }));
 
 // Import the functions to test after mocks are set up

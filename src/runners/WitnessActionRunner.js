@@ -274,7 +274,7 @@ class WitnessActionRunner {
     }
     
     if (allInputs.length > 0) {
-      core.info(`Passing all inputs to wrapped action: ${allInputs.length} inputs`);
+      core.info(`Passing direct input to wrapped action: ${allInputs.length} inputs`);
       core.debug(`Inputs: ${allInputs.join(', ')}`);
     } else {
       core.info('No inputs to pass to wrapped action');
