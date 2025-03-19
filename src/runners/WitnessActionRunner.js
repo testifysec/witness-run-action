@@ -169,10 +169,20 @@ class WitnessActionRunner {
     
     core.info(`Executing Docker command: ${dockerCommand}`);
     
-    // Run the Docker command with witness
+    // Create a copy of witness options with signing disabled
+    const witnessDockerOptions = { ...this.witnessOptions };
+    
+    // Ensure signing is disabled since we're not running in a Git context
+    // This prevents the "failed to load signers" error when running direct Docker commands
+    witnessDockerOptions.enableSigstore = false;
+    witnessDockerOptions.enableArchivista = false;
+    
+    core.info(`Disabling signers for direct Docker image command`);
+    
+    // Run the Docker command with witness and modified options
     return await runDirectCommandWithWitness(
       dockerCommand,
-      this.witnessOptions,
+      witnessDockerOptions,
       this.witnessExePath
     );
   }
