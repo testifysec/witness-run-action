@@ -51,8 +51,22 @@ const docker = {
       await exec.exec('docker', ['pull', image]);
       return image;
     } catch (error) {
-      throw new Error(`Failed to pull Docker image: ${error.message}`);
+      core.warning(`Failed to pull Docker image: ${error.message}. Will try to use it directly.`);
+      // Return the image name without the prefix to try using it directly
+      return imageReference.replace(/^docker:\/\//, '');
     }
+  },
+
+  /**
+   * Parse and normalize Docker image reference
+   */
+  parseImageReference(imageReference) {
+    if (!imageReference) {
+      throw new Error('Image reference is required');
+    }
+    
+    // Strip docker:// protocol prefix if present
+    return imageReference.replace(/^docker:\/\//, '');
   }
 };
 
@@ -248,10 +262,13 @@ async function runDockerActionWithWitness(actionDir, actionConfig, witnessOption
     // Build the Docker image
     dockerImage = await docker.buildImage(dockerfilePath, uniqueTag, actionDir);
   } else if (image.startsWith('docker://')) {
-    // This is a pre-built Docker image
+    // This is a pre-built Docker image with the docker:// protocol prefix
+    core.info(`Using pre-built Docker image: ${image}`);
     dockerImage = await docker.pullImage(image);
   } else {
-    throw new Error(`Unsupported Docker image format: ${image}`);
+    // Assume this is a regular Docker image name without protocol prefix
+    core.info(`Using Docker image: ${image}`);
+    dockerImage = image;
   }
   
   // Process entrypoint from action config
@@ -263,8 +280,17 @@ async function runDockerActionWithWitness(actionDir, actionConfig, witnessOption
   // Process args with input variables
   if (Array.isArray(args)) {
     args = args.map(arg => {
+      // Skip null or undefined values or convert to empty string
+      if (arg === null || arg === undefined) {
+        core.debug(`Converting null/undefined argument to empty string`);
+        return '';
+      }
+
+      // Ensure arg is a string
+      const argStr = String(arg);
+      
       // Replace expression placeholders with actual values
-      return arg.replace(/\$\{\{\s*inputs\.([a-zA-Z0-9_-]+)\s*\}\}/g, (match, inputName) => {
+      return argStr.replace(/\$\{\{\s*inputs\.([a-zA-Z0-9_-]+)\s*\}\}/g, (match, inputName) => {
         const normalizedName = inputName.replace(/-/g, '_').toUpperCase();
         return runEnv[`INPUT_${normalizedName}`] || '';
       });
@@ -274,8 +300,17 @@ async function runDockerActionWithWitness(actionDir, actionConfig, witnessOption
   // Process custom environment variables
   if (actionConfig.runs.env) {
     for (const [envName, envValue] of Object.entries(actionConfig.runs.env)) {
+      // Skip null or undefined values
+      if (envValue === null || envValue === undefined) {
+        core.debug(`Skipping null/undefined environment variable: ${envName}`);
+        continue;
+      }
+
+      // Ensure envValue is a string
+      const envValueStr = String(envValue);
+      
       // Replace expression placeholders with actual values
-      const processedValue = envValue.replace(/\$\{\{\s*inputs\.([a-zA-Z0-9_-]+)\s*\}\}/g, (match, inputName) => {
+      const processedValue = envValueStr.replace(/\$\{\{\s*inputs\.([a-zA-Z0-9_-]+)\s*\}\}/g, (match, inputName) => {
         const normalizedName = inputName.replace(/-/g, '_').toUpperCase();
         return runEnv[`INPUT_${normalizedName}`] || '';
       });
@@ -288,18 +323,57 @@ async function runDockerActionWithWitness(actionDir, actionConfig, witnessOption
   const dockerRunArgs = ['run', '--rm'];
   
   // Add volume for workspace
-  dockerRunArgs.push('-v', `${process.env.GITHUB_WORKSPACE}:/github/workspace`);
+  if (process.env.GITHUB_WORKSPACE) {
+    dockerRunArgs.push('-v', `${process.env.GITHUB_WORKSPACE}:/github/workspace`);
+    
+    // Set working directory to workspace
+    dockerRunArgs.push('-w', '/github/workspace');
+  } else {
+    core.warning('GITHUB_WORKSPACE is not defined. This might cause issues with the Docker container.');
+  }
+
+  // Create GitHub-specific paths for outputs, env, etc.
+  const tmpDir = os.tmpdir();
+  const githubOutputPath = path.join(tmpDir, 'github_output');
+  const githubEnvPath = path.join(tmpDir, 'github_env');
+  const githubPathPath = path.join(tmpDir, 'github_path');
+  const githubStepSummaryPath = path.join(tmpDir, 'github_step_summary');
   
-  // Set working directory to workspace
-  dockerRunArgs.push('-w', '/github/workspace');
+  // Create empty files for GitHub paths
+  try {
+    fs.writeFileSync(githubOutputPath, '');
+    fs.writeFileSync(githubEnvPath, '');
+    fs.writeFileSync(githubPathPath, '');
+    fs.writeFileSync(githubStepSummaryPath, '');
+    
+    // Mount these files into the container
+    dockerRunArgs.push('-v', `${githubOutputPath}:/github/output`);
+    dockerRunArgs.push('-v', `${githubEnvPath}:/github/env`);
+    dockerRunArgs.push('-v', `${githubPathPath}:/github/path`);
+    dockerRunArgs.push('-v', `${githubStepSummaryPath}:/github/step-summary`);
+  } catch (error) {
+    core.warning(`Failed to create GitHub paths: ${error.message}`);
+  }
   
   // Add environment variables
   for (const [key, value] of Object.entries(runEnv)) {
-    dockerRunArgs.push('-e', `${key}=${value}`);
+    if (value !== undefined && value !== null) {
+      dockerRunArgs.push('-e', `${key}=${value}`);
+    }
   }
   
   // Add standard GitHub Actions environment variables
   dockerRunArgs.push('-e', 'GITHUB_OUTPUT=/github/output');
+  dockerRunArgs.push('-e', 'GITHUB_ENV=/github/env');
+  dockerRunArgs.push('-e', 'GITHUB_PATH=/github/path');
+  dockerRunArgs.push('-e', 'GITHUB_STEP_SUMMARY=/github/step-summary');
+  
+  // Pass through other GitHub environment variables
+  for (const [key, value] of Object.entries(process.env)) {
+    if (key.startsWith('GITHUB_') && !runEnv[key] && value !== undefined && value !== null) {
+      dockerRunArgs.push('-e', `${key}=${value}`);
+    }
+  }
   
   // Add entrypoint if specified
   if (entrypoint) {
@@ -318,20 +392,40 @@ async function runDockerActionWithWitness(actionDir, actionConfig, witnessOption
   const witnessArgs = assembleWitnessArgs(witnessOptions, ['docker', ...dockerRunArgs]);
   core.info(`Running witness command: ${witnessExePath} ${witnessArgs.join(" ")}`);
   
+  // Add more debug information about witness and environment
+  core.debug(`Witness executable path: ${witnessExePath}`);
+  core.debug(`Action directory: ${actionDir}`);
+  core.debug(`Docker image: ${dockerImage}`);
+  
   // Execute the command with witness attestation
   let output = "";
-  await exec.exec(witnessExePath, witnessArgs, {
-    cwd: actionDir,
-    env: actionEnv || process.env,
-    listeners: {
-      stdout: (data) => {
-        output += data.toString();
+  try {
+    await exec.exec(witnessExePath, witnessArgs, {
+      cwd: actionDir,
+      env: actionEnv || process.env,
+      listeners: {
+        stdout: (data) => {
+          const str = data.toString();
+          output += str;
+          
+          // Log witness-related debug info
+          if (str.includes('witness:') || str.includes('error:')) {
+            core.debug(`Witness output: ${str.trim()}`);
+          }
+        },
+        stderr: (data) => {
+          const str = data.toString();
+          output += str;
+          core.debug(`Witness stderr: ${str.trim()}`);
+        },
       },
-      stderr: (data) => {
-        output += data.toString();
-      },
-    },
-  });
+    });
+  } catch (error) {
+    core.error(`Failed to execute Docker action with witness: ${error.message}`);
+    core.error(`Witness args: ${witnessArgs.join(' ')}`);
+    core.error(`Docker command: docker ${dockerRunArgs.join(' ')}`);
+    throw error;
+  }
   
   return output;
 }
