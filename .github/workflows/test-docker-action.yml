@@ -159,8 +159,8 @@ jobs:
           action-ref: ./.github/actions/test-prebuilt-docker
           step: test-prebuilt-image-action
           message: 'CI Test Runner using pre-built image'
-          enable-sigstore: false
-          enable-archivista: false
+          enable-sigstore: true
+          enable-archivista: true
           
       # Step 4: Verify the outputs
       - name: Verify pre-built image action outputs
@@ -207,8 +207,8 @@ jobs:
           action-ref: "docker://alpine:latest"
           step: test-real-docker-action
           command: "echo 'Hello from direct Docker image!'"
-          enable-sigstore: false
-          enable-archivista: false
+          enable-sigstore: true
+          enable-archivista: true
           
       # Verify the outputs
       - name: Verify real-world Docker action outputs

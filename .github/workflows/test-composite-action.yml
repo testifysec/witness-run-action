@@ -82,9 +82,6 @@ jobs:
                 shell: bash
           EOF
       
-      # Step 2: Build witness-run-action
-      - name: Build
-        run: npm run build
         
       # Step 3: Run the action with the witness wrapper using remote GitHub action
       - name: Run with witness wrapper
