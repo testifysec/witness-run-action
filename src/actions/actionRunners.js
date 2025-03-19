@@ -12,6 +12,51 @@ const { executeCompositeUsesStep } = require('./compositeActionUtils');
 const { executeCompositeShellStep } = require('./compositeActionUtils');
 
 /**
+ * Docker command utilities
+ */
+const docker = {
+  /**
+   * Verify Docker is installed and available
+   */
+  async verifyInstallation() {
+    try {
+      await exec.exec('docker', ['--version']);
+      return true;
+    } catch (error) {
+      throw new Error('Docker is not installed or not in the PATH');
+    }
+  },
+
+  /**
+   * Build a Docker image from Dockerfile
+   */
+  async buildImage(dockerfilePath, imageName, actionDir) {
+    try {
+      core.info(`Building Docker image ${imageName} from ${dockerfilePath}`);
+      await exec.exec('docker', ['build', '-t', imageName, '-f', dockerfilePath, actionDir]);
+      return imageName;
+    } catch (error) {
+      throw new Error(`Failed to build Docker image: ${error.message}`);
+    }
+  },
+
+  /**
+   * Pull a Docker image from a registry
+   */
+  async pullImage(imageReference) {
+    try {
+      // Remove docker:// prefix if present
+      const image = imageReference.replace(/^docker:\/\//, '');
+      core.info(`Pulling Docker image ${image}`);
+      await exec.exec('docker', ['pull', image]);
+      return image;
+    } catch (error) {
+      throw new Error(`Failed to pull Docker image: ${error.message}`);
+    }
+  }
+};
+
+/**
  * Runs a JavaScript GitHub Action using witness.
  */
 async function runJsActionWithWitness(actionDir, actionConfig, witnessOptions, witnessExePath, actionEnv) {
@@ -157,7 +202,142 @@ async function runCompositeActionWithWitness(actionDir, actionConfig, witnessOpt
   return output;
 }
 
+/**
+ * Runs a Docker container GitHub Action using witness.
+ */
+async function runDockerActionWithWitness(actionDir, actionConfig, witnessOptions, witnessExePath, actionEnv = {}) {
+  // Verify Docker is installed
+  await docker.verifyInstallation();
+  
+  // Initialize environment and process input variables
+  const runEnv = { ...actionEnv };
+  
+  // Process inputs and add them to the environment
+  if (actionConfig.inputs) {
+    core.info(`Processing ${Object.keys(actionConfig.inputs).length} inputs from action config`);
+    
+    for (const [inputName, inputConfig] of Object.entries(actionConfig.inputs)) {
+      const inputKey = `INPUT_${inputName.replace(/-/g, '_').toUpperCase()}`;
+      
+      // Check if the input was provided, or use default
+      if (runEnv[inputKey]) {
+        core.info(`Using provided input: ${inputName}=${runEnv[inputKey]}`);
+      } else if (inputConfig.default) {
+        runEnv[inputKey] = inputConfig.default;
+        core.info(`Using default input: ${inputName}=${inputConfig.default}`);
+      } else if (inputConfig.required) {
+        throw new Error(`Required input '${inputName}' was not provided`);
+      }
+    }
+  }
+  
+  const image = actionConfig.runs.image;
+  let dockerImage;
+  
+  // Check if this is a Dockerfile action or a pre-built image
+  if (image.toLowerCase() === 'dockerfile') {
+    // This is a Dockerfile action
+    const dockerfilePath = path.join(actionDir, 'Dockerfile');
+    if (!fs.existsSync(dockerfilePath)) {
+      throw new Error(`Dockerfile not found at ${dockerfilePath}`);
+    }
+    
+    // Generate unique image name
+    const uniqueTag = `github-action-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Build the Docker image
+    dockerImage = await docker.buildImage(dockerfilePath, uniqueTag, actionDir);
+  } else if (image.startsWith('docker://')) {
+    // This is a pre-built Docker image
+    dockerImage = await docker.pullImage(image);
+  } else {
+    throw new Error(`Unsupported Docker image format: ${image}`);
+  }
+  
+  // Process entrypoint from action config
+  const entrypoint = actionConfig.runs.entrypoint;
+  
+  // Process args from action config
+  let args = actionConfig.runs.args || [];
+  
+  // Process args with input variables
+  if (Array.isArray(args)) {
+    args = args.map(arg => {
+      // Replace expression placeholders with actual values
+      return arg.replace(/\$\{\{\s*inputs\.([a-zA-Z0-9_-]+)\s*\}\}/g, (match, inputName) => {
+        const normalizedName = inputName.replace(/-/g, '_').toUpperCase();
+        return runEnv[`INPUT_${normalizedName}`] || '';
+      });
+    });
+  }
+  
+  // Process custom environment variables
+  if (actionConfig.runs.env) {
+    for (const [envName, envValue] of Object.entries(actionConfig.runs.env)) {
+      // Replace expression placeholders with actual values
+      const processedValue = envValue.replace(/\$\{\{\s*inputs\.([a-zA-Z0-9_-]+)\s*\}\}/g, (match, inputName) => {
+        const normalizedName = inputName.replace(/-/g, '_').toUpperCase();
+        return runEnv[`INPUT_${normalizedName}`] || '';
+      });
+      
+      runEnv[envName] = processedValue;
+    }
+  }
+  
+  // Now set up the Docker run command arguments
+  const dockerRunArgs = ['run', '--rm'];
+  
+  // Add volume for workspace
+  dockerRunArgs.push('-v', `${process.env.GITHUB_WORKSPACE}:/github/workspace`);
+  
+  // Set working directory to workspace
+  dockerRunArgs.push('-w', '/github/workspace');
+  
+  // Add environment variables
+  for (const [key, value] of Object.entries(runEnv)) {
+    dockerRunArgs.push('-e', `${key}=${value}`);
+  }
+  
+  // Add standard GitHub Actions environment variables
+  dockerRunArgs.push('-e', 'GITHUB_OUTPUT=/github/output');
+  
+  // Add entrypoint if specified
+  if (entrypoint) {
+    dockerRunArgs.push('--entrypoint', entrypoint);
+  }
+  
+  // Add the image name
+  dockerRunArgs.push(dockerImage);
+  
+  // Add args if any
+  if (args.length > 0) {
+    dockerRunArgs.push(...args);
+  }
+  
+  // Construct the witness command
+  const witnessArgs = assembleWitnessArgs(witnessOptions, ['docker', ...dockerRunArgs]);
+  core.info(`Running witness command: ${witnessExePath} ${witnessArgs.join(" ")}`);
+  
+  // Execute the command with witness attestation
+  let output = "";
+  await exec.exec(witnessExePath, witnessArgs, {
+    cwd: actionDir,
+    env: actionEnv || process.env,
+    listeners: {
+      stdout: (data) => {
+        output += data.toString();
+      },
+      stderr: (data) => {
+        output += data.toString();
+      },
+    },
+  });
+  
+  return output;
+}
+
 module.exports = {
   runJsActionWithWitness,
-  runCompositeActionWithWitness
+  runCompositeActionWithWitness,
+  runDockerActionWithWitness
 };
