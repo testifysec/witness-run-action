@@ -33680,6 +33680,12 @@ class WitnessActionRunner {
   async executeAction(actionRef) {
     core.info(`Wrapping GitHub Action: ${actionRef}`);
     
+    // Check if this is a direct Docker image reference
+    if (actionRef.startsWith('docker://')) {
+      core.info(`Executing Docker command for direct image reference: ${actionRef}`);
+      return this.executeDockerImageCommand(actionRef);
+    }
+    
     // Determine action directory - local or remote
     if (actionRef.startsWith('./') || actionRef.startsWith('../')) {
       this.actionDir = this.resolveLocalActionPath(actionRef);
@@ -33707,6 +33713,53 @@ class WitnessActionRunner {
         cleanUpDirectory(this.actionDir);
       }
     }
+  }
+  
+  /**
+   * Executes a direct Docker image as a command with Witness
+   */
+  async executeDockerImageCommand(dockerImageRef) {
+    core.info(`Running direct Docker image: ${dockerImageRef}`);
+    
+    // Get the Docker image name by removing the docker:// prefix
+    const dockerImage = dockerImageRef.replace(/^docker:\/\//, '');
+    
+    // Get any command that was provided
+    const command = core.getInput('command');
+    
+    // Prepare the Docker command to run the image
+    let dockerCommand = `docker run --rm`;
+    
+    // Set up the environment variables for the Docker container
+    const env = this.getWrappedActionEnv();
+    for (const [key, value] of Object.entries(env)) {
+      if (key.startsWith('INPUT_') && value !== undefined && value !== null) {
+        dockerCommand += ` -e ${key}=${value}`;
+      }
+    }
+    
+    // Add workspace volume if available
+    if (process.env.GITHUB_WORKSPACE) {
+      dockerCommand += ` -v ${process.env.GITHUB_WORKSPACE}:/github/workspace`;
+      dockerCommand += ` -w /github/workspace`;
+    }
+    
+    // Add the Docker image
+    dockerCommand += ` ${dockerImage}`;
+    
+    // Add the command if specified
+    if (command) {
+      dockerCommand += ` /bin/sh -c "${command}"`;
+    }
+    
+    core.info(`Executing Docker command: ${dockerCommand}`);
+    
+    // Run the Docker command with witness
+    return await runDirectCommandWithWitness(
+      dockerCommand,
+      this.witnessOptions,
+      this.witnessExePath
+    );
   }
   
   /**
