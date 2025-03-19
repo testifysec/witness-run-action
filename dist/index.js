@@ -33329,8 +33329,8 @@ function assembleWitnessArgs(witnessOptions, extraArgs = []) {
       }
     });
   } else {
-    // Always add a signers-no-verification flag to allow running without signers
-    cmd.push('--signers-no-verification=true');
+    // For non-sigstore runs, don't add any special flags
+    // witness will run without signers by default
     
     // Add timestamp servers if provided
     if (timestampServers) {
@@ -33846,19 +33846,9 @@ class WitnessActionRunner {
    * All direct inputs are passed as "passed inputs".
    */
   getWrappedActionEnv() {
+    // Start with a copy of the current environment
     const newEnv = { ...process.env };
     const passedInputs = new Set();
-    
-    // Pass all direct inputs that are not part of witness options.
-    const witnessInputNames = new Set(
-      [
-        "witness-install-dir", "archivista-server", "attestations", "attestor-link-export", "attestor-maven-pom-path",
-        "attestor-sbom-export", "attestor-slsa-export", "enable-sigstore", "command", "certificate", "enable-archivista",
-        "fulcio", "fulcio-oidc-client-id", "fulcio-oidc-issuer", "fulcio-token", "intermediates", "key", "outfile",
-        "product-exclude-glob", "product-include-glob", "spiffe-socket", "step", "timestamp-servers", "trace", "version",
-        "workingdir", "action-ref"
-      ].map(name => name.toLowerCase())
-    );
     
     // Debug: Log existing environment variables that might be relevant
     core.info('Debug: Environment variables in getWrappedActionEnv:');
@@ -33868,27 +33858,28 @@ class WitnessActionRunner {
       }
     });
     
-    // Log all INPUT_ environment variables
-    core.info('All INPUT_ environment variables:');
+    // Pass through ALL environment variables, including inputs
+    // This avoids any filtering and ensures Docker containers get all the inputs they need
+    
+    // Log all inputs for debugging purposes
+    const allInputs = [];
     for (const key in process.env) {
       if (key.startsWith('INPUT_')) {
-        core.debug(`  ${key}=${process.env[key]}`);
-      }
-    }
-    
-    // Pass through all direct inputs, whether they are part of witness options or not
-    // This ensures all inputs are available to the wrapped Docker container or action
-    for (const key in process.env) {
-      const match = key.match(/^INPUT_(.+)$/);
-      if (match) {
-        const inputName = match[1].toLowerCase();
-        // We need to pass all inputs to the Docker container, even those used by witness
+        const inputName = key.substring(6).toLowerCase();
         if (!passedInputs.has(inputName)) {
-          core.info(`Passing input to wrapped action: ${inputName}=${process.env[key]}`);
+          allInputs.push(`${inputName}=${process.env[key]}`);
           passedInputs.add(inputName);
         }
       }
     }
+    
+    if (allInputs.length > 0) {
+      core.info(`Passing all inputs to wrapped action: ${allInputs.length} inputs`);
+      core.debug(`Inputs: ${allInputs.join(', ')}`);
+    } else {
+      core.info('No inputs to pass to wrapped action');
+    }
+    
     return newEnv;
   }
 }

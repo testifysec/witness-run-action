@@ -54,8 +54,8 @@ function assembleWitnessArgs(witnessOptions, extraArgs = []) {
       }
     });
   } else {
-    // Always add a signers-no-verification flag to allow running without signers
-    cmd.push('--signers-no-verification=true');
+    // For non-sigstore runs, don't add any special flags
+    // witness will run without signers by default
     
     // Add timestamp servers if provided
     if (timestampServers) {
