@@ -12,7 +12,8 @@ const { detectActionType } = require("../actions/actionUtils");
 const { getActionYamlPath } = require("../actions/actionUtils");
 const {
   runJsActionWithWitness,
-  runCompositeActionWithWitness
+  runCompositeActionWithWitness,
+  runDockerActionWithWitness
 } = require("../actions/actionRunners");
 
 /**
@@ -30,7 +31,7 @@ async function runActionWithWitness(actionDir, witnessOptions, witnessExePath, a
     case 'javascript':
       return await runJsActionWithWitness(actionDir, actionConfig, witnessOptions, witnessExePath, actionEnv);
     case 'docker':
-      throw new Error('Docker-based actions are not yet supported');
+      return await runDockerActionWithWitness(actionDir, actionConfig, witnessOptions, witnessExePath, actionEnv);
     case 'composite':
       return await runCompositeActionWithWitness(actionDir, actionConfig, witnessOptions, witnessExePath, actionEnv);
     default:

@@ -33759,7 +33759,8 @@ const { detectActionType } = __nccwpck_require__(4918);
 const { getActionYamlPath } = __nccwpck_require__(4918);
 const {
   runJsActionWithWitness,
-  runCompositeActionWithWitness
+  runCompositeActionWithWitness,
+  runDockerActionWithWitness
 } = __nccwpck_require__(5904);
 
 /**
@@ -33777,7 +33778,7 @@ async function runActionWithWitness(actionDir, witnessOptions, witnessExePath, a
     case 'javascript':
       return await runJsActionWithWitness(actionDir, actionConfig, witnessOptions, witnessExePath, actionEnv);
     case 'docker':
-      throw new Error('Docker-based actions are not yet supported');
+      return await runDockerActionWithWitness(actionDir, actionConfig, witnessOptions, witnessExePath, actionEnv);
     case 'composite':
       return await runCompositeActionWithWitness(actionDir, actionConfig, witnessOptions, witnessExePath, actionEnv);
     default:
