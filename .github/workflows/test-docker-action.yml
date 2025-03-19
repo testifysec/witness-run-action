@@ -1,0 +1,258 @@
+permissions:
+  id-token: write # This is required for requesting the JWT
+  contents: read  # This is required for actions/checkout
+
+name: Test Docker Action Support
+
+on:
+  push:
+    branches: [ feature/docker-action-support ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  test-dockerfile-action:
+    name: Test Dockerfile-based Docker Action
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      # Step 1: Create local test Docker action with Dockerfile
+      - name: Create test Docker action
+        run: |
+          mkdir -p .github/actions/test-docker
+          
+          # Create the Dockerfile
+          cat > .github/actions/test-docker/Dockerfile << 'EOF'
+          FROM alpine:latest
+          
+          COPY entrypoint.sh /entrypoint.sh
+          RUN chmod +x /entrypoint.sh
+          
+          ENTRYPOINT ["/entrypoint.sh"]
+          EOF
+          
+          # Create the entrypoint script
+          cat > .github/actions/test-docker/entrypoint.sh << 'EOF'
+          #!/bin/sh
+          echo "Hello from Docker action! Arguments: $@"
+          echo "Environment variables:"
+          echo "INPUT_WHO_TO_GREET: $INPUT_WHO_TO_GREET"
+          echo "GITHUB_WORKSPACE: $GITHUB_WORKSPACE"
+          echo "Looking at workspace files:"
+          ls -la /github/workspace
+          echo "WHO_TO_GREET=$INPUT_WHO_TO_GREET" >> $GITHUB_OUTPUT
+          EOF
+          chmod +x .github/actions/test-docker/entrypoint.sh
+          
+          # Create the action metadata
+          cat > .github/actions/test-docker/action.yml << 'EOF'
+          name: 'Test Docker Action'
+          description: 'Test Docker action for witness-run-action'
+          inputs:
+            who-to-greet:
+              description: 'Who to greet'
+              required: true
+              default: 'World'
+          outputs:
+            who-to-greet:
+              description: "Who was greeted"
+              value: ${{ steps.docker-step.outputs.WHO_TO_GREET }}
+          runs:
+            using: 'docker'
+            image: 'Dockerfile'
+            args:
+              - ${{ inputs.who-to-greet }}
+          EOF
+      
+      # Step 2: Build witness-run-action
+      - name: Build
+        run: npm run build
+        
+      # Step 3: Set up tracking with GitHub CLI for better debugging
+      - name: Setup GitHub CLI
+        uses: cli/gh-extension-precompile@v1
+        with:
+          repo: cli/gh-extension-precompile
+        
+      # Create a file to mark the start of the test
+      - name: Create test marker
+        run: |
+          echo "Test started at $(date)" > docker-test-marker.txt
+          git add docker-test-marker.txt
+          git config --global user.email "test@example.com"
+          git config --global user.name "Test Runner"
+          git commit -m "Add Docker test marker" || echo "No changes to commit"
+      
+      # Step 4: Run the Dockerfile-based action with witness
+      - name: Run Dockerfile action with witness
+        id: test-dockerfile
+        uses: ./
+        with:
+          action-ref: ./.github/actions/test-docker
+          step: test-dockerfile-action
+          who-to-greet: 'CI Test Runner'
+          enable-sigstore: false
+          enable-archivista: false
+          
+      # Step 5: Verify the outputs
+      - name: Verify Dockerfile action outputs
+        run: |
+          echo "GitOID: ${{ steps.test-dockerfile.outputs.git_oid }}"
+          
+          # Check that Docker was executed correctly
+          if [[ -z "${{ steps.test-dockerfile.outputs.git_oid }}" ]]; then
+            gh issue create --title "Docker Action E2E Test Failure: Missing GitOID" --body "The Dockerfile-based Docker action test failed to generate a GitOID at $(date)"
+            echo "ERROR: GitOID was not generated for Dockerfile action"
+            exit 1
+          else
+            echo "SUCCESS: GitOID was generated for Dockerfile action"
+          fi
+          
+          # Print logs for debugging
+          echo "=== Dockerfile Action Logs ==="
+          if [ -f "$GITHUB_STEP_SUMMARY" ]; then
+            cat $GITHUB_STEP_SUMMARY
+          fi
+  
+  test-prebuilt-docker-action:
+    name: Test Pre-built Docker Image Action
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      # Step 1: Create local test action with pre-built Docker image
+      - name: Create test pre-built Docker action
+        run: |
+          mkdir -p .github/actions/test-prebuilt-docker
+          
+          # Create the action metadata using a standard alpine image
+          cat > .github/actions/test-prebuilt-docker/action.yml << 'EOF'
+          name: 'Test Pre-built Docker Action'
+          description: 'Test pre-built Docker image action for witness-run-action'
+          inputs:
+            message:
+              description: 'Message to echo'
+              required: true
+              default: 'Hello from pre-built Docker image'
+          runs:
+            using: 'docker'
+            image: 'docker://alpine:latest'
+            entrypoint: 'sh'
+            args:
+              - '-c'
+              - 'echo "Running pre-built image test with message: ${{ inputs.message }}" && echo "Files in workspace:" && ls -la /github/workspace && echo "MESSAGE=${{ inputs.message }}" >> $GITHUB_OUTPUT'
+          EOF
+      
+      # Step 2: Build witness-run-action
+      - name: Build
+        run: npm run build
+        
+      # Step 3: Set up tracking with GitHub CLI for better debugging
+      - name: Setup GitHub CLI
+        uses: cli/gh-extension-precompile@v1
+        with:
+          repo: cli/gh-extension-precompile
+      
+      # Step 4: Run the pre-built image action with witness
+      - name: Run pre-built Docker image action with witness
+        id: test-prebuilt
+        uses: ./
+        with:
+          action-ref: ./.github/actions/test-prebuilt-docker
+          step: test-prebuilt-image-action
+          message: 'CI Test Runner using pre-built image'
+          enable-sigstore: false
+          enable-archivista: false
+          
+      # Step 5: Verify the outputs
+      - name: Verify pre-built image action outputs
+        run: |
+          echo "GitOID: ${{ steps.test-prebuilt.outputs.git_oid }}"
+          
+          # Check that Docker was executed correctly
+          if [[ -z "${{ steps.test-prebuilt.outputs.git_oid }}" ]]; then
+            gh issue create --title "Pre-built Docker Action E2E Test Failure: Missing GitOID" --body "The pre-built Docker image action test failed to generate a GitOID at $(date)"
+            echo "ERROR: GitOID was not generated for pre-built image action"
+            exit 1
+          else
+            echo "SUCCESS: GitOID was generated for pre-built image action"
+          fi
+          
+          # Print logs for debugging
+          echo "=== Pre-built Image Action Logs ==="
+          if [ -f "$GITHUB_STEP_SUMMARY" ]; then
+            cat $GITHUB_STEP_SUMMARY
+          fi
+
+  test-real-docker-action:
+    name: Test Real-world Docker Action
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      # Build witness-run-action
+      - name: Build
+        run: npm run build
+        
+      # Set up tracking with GitHub CLI for better debugging
+      - name: Setup GitHub CLI
+        uses: cli/gh-extension-precompile@v1
+        with:
+          repo: cli/gh-extension-precompile
+      
+      # Run a real-world Docker action with witness
+      - name: Run Docker action with witness
+        id: test-real-docker
+        uses: ./
+        with:
+          action-ref: "docker://alpine:latest"
+          step: test-real-docker-action
+          command: "echo 'Hello from direct Docker image!'"
+          enable-sigstore: false
+          enable-archivista: false
+          
+      # Verify the outputs
+      - name: Verify real-world Docker action outputs
+        run: |
+          echo "GitOID: ${{ steps.test-real-docker.outputs.git_oid }}"
+          
+          # Check that Docker was executed correctly
+          if [[ -z "${{ steps.test-real-docker.outputs.git_oid }}" ]]; then
+            gh issue create --title "Real-world Docker Action E2E Test Failure: Missing GitOID" --body "The real-world Docker action test failed to generate a GitOID at $(date)"
+            echo "ERROR: GitOID was not generated for real-world Docker action"
+            exit 1
+          else
+            echo "SUCCESS: GitOID was generated for real-world Docker action"
+          fi
+          
+          # Print logs for debugging
+          echo "=== Real-world Docker Action Logs ==="
+          if [ -f "$GITHUB_STEP_SUMMARY" ]; then
+            cat $GITHUB_STEP_SUMMARY
+          fi
