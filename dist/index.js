@@ -33316,11 +33316,8 @@ function assembleWitnessArgs(witnessOptions, extraArgs = []) {
     cmd.push(`--signer-fulcio-oidc-client-id=${sigstoreClientId}`);
     cmd.push(`--signer-fulcio-oidc-issuer=${sigstoreOidcIssuer}`);
     
-    // For CI environments where id-token is available, set the right parameters
-    if (process.env.ACTIONS_ID_TOKEN_REQUEST_URL && process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN) {
-      cmd.push('--signer-oidc-disable-ambient');
-      cmd.push('--signer-oidc-use-token-trust=true');
-    }
+    // Remove CI-specific OIDC flags that might not be supported in this version
+    // Just use the standard Sigstore flags
     
     sigstoreTimestampServers.split(" ").forEach((ts) => {
       ts = ts.trim();
