@@ -268,6 +268,15 @@ async function runDockerActionWithWitness(actionDir, actionConfig, witnessOption
   } else {
     // Assume this is a regular Docker image name without protocol prefix
     core.info(`Using Docker image: ${image}`);
+    
+    // Attempt to pull the image first to ensure it's available
+    try {
+      core.info(`Pulling image: ${image}`);
+      await exec.exec('docker', ['pull', image]);
+    } catch (error) {
+      core.warning(`Failed to pull image: ${error.message}. Will attempt to use the image directly.`);
+    }
+    
     dockerImage = image;
   }
   

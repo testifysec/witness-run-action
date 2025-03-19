@@ -32568,6 +32568,15 @@ async function runDockerActionWithWitness(actionDir, actionConfig, witnessOption
   } else {
     // Assume this is a regular Docker image name without protocol prefix
     core.info(`Using Docker image: ${image}`);
+    
+    // Attempt to pull the image first to ensure it's available
+    try {
+      core.info(`Pulling image: ${image}`);
+      await exec.exec('docker', ['pull', image]);
+    } catch (error) {
+      core.warning(`Failed to pull image: ${error.message}. Will attempt to use the image directly.`);
+    }
+    
     dockerImage = image;
   }
   
@@ -33881,12 +33890,23 @@ class WitnessActionRunner {
       }
     });
     
+    // Log all INPUT_ environment variables
+    core.info('All INPUT_ environment variables:');
+    for (const key in process.env) {
+      if (key.startsWith('INPUT_')) {
+        core.debug(`  ${key}=${process.env[key]}`);
+      }
+    }
+    
+    // Pass through all direct inputs, whether they are part of witness options or not
+    // This ensures all inputs are available to the wrapped Docker container or action
     for (const key in process.env) {
       const match = key.match(/^INPUT_(.+)$/);
       if (match) {
         const inputName = match[1].toLowerCase();
-        if (!witnessInputNames.has(inputName) && !passedInputs.has(inputName)) {
-          core.info(`Passing direct input to wrapped action: ${inputName}=${process.env[key]}`);
+        // We need to pass all inputs to the Docker container, even those used by witness
+        if (!passedInputs.has(inputName)) {
+          core.info(`Passing input to wrapped action: ${inputName}=${process.env[key]}`);
           passedInputs.add(inputName);
         }
       }
