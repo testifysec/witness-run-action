@@ -97,19 +97,37 @@ class WitnessActionRunner {
     
     // Check if this is a direct Docker image reference
     if (actionRef.startsWith('docker://')) {
-      core.info(`Executing Docker command for direct image reference: ${actionRef}`);
+      core.info(`Executing Docker action for direct image reference: ${actionRef}`);
       
-      // For direct Docker image references, we're using a command-based approach
-      // This is treated as a "command" execution rather than an "action" execution
-      const dockerImage = actionRef.replace(/^docker:\/\//, '');
-      const command = core.getInput('command') || `echo "Running ${dockerImage} container"`;
+      // Create a minimal action config for the Docker image
+      const command = core.getInput('command');
       
-      // Build the Docker command
-      const dockerCommand = `docker run --rm -v "${process.env.GITHUB_WORKSPACE || process.cwd()}:/github/workspace" -w /github/workspace ${dockerImage} /bin/sh -c "${command}"`;
-      core.info(`Converted direct Docker image reference to command: ${dockerCommand}`);
+      // Create a synthetic action config for Docker
+      const actionConfig = {
+        name: 'Docker Image Action',
+        description: 'Docker container action',
+        runs: {
+          using: 'docker',
+          image: actionRef, // Keep the docker:// prefix for proper handling
+          args: command ? ['/bin/sh', '-c', command] : []
+        }
+      };
       
-      // Execute as a direct command
-      return await this.executeCommand(dockerCommand);
+      // Get custom inputs to pass to Docker
+      const actionEnv = this.getWrappedActionEnv();
+      
+      // Use the workspace directory for running the Docker action
+      const workspaceDir = process.env.GITHUB_WORKSPACE || process.cwd();
+      
+      // Run as a Docker action with witness
+      core.info(`Running direct Docker image as a Docker action: ${actionRef}`);
+      return await runActionWithWitness(
+        workspaceDir,
+        this.witnessOptions,
+        this.witnessExePath,
+        actionEnv,
+        actionConfig  // Pass the synthetic action config directly
+      );
     }
     
     // Determine action directory - local or remote

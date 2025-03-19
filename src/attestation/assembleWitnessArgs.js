@@ -101,7 +101,19 @@ function assembleWitnessArgs(witnessOptions, extraArgs = []) {
   if (trace) cmd.push(`--trace=${trace}`);
   if (outfile) cmd.push(`--outfile=${outfile}`);
   
-  return [...cmd, "--", ...extraArgs];
+  // Clean up extraArgs to ensure they're all strings
+  const cleanedExtraArgs = extraArgs.map(arg => {
+    // Convert null/undefined to empty string
+    if (arg === null || arg === undefined) {
+      return '';
+    }
+    // Convert to string for all other types
+    return String(arg);
+  });
+  
+  // Debug the exact arguments being passed
+  const fullCommandArgs = [...cmd, "--", ...cleanedExtraArgs];
+  return fullCommandArgs;
 }
 
 module.exports = assembleWitnessArgs;

@@ -275,6 +275,15 @@ async function runDockerActionWithWitness(actionDir, actionConfig, witnessOption
       core.warning(`Error pulling Docker image: ${error.message}`);
       // Fall back to using the image directly in case it's already available locally
       dockerImage = imageWithoutPrefix;
+      
+      // Check if image exists locally
+      try {
+        core.info(`Checking if image exists locally: ${imageWithoutPrefix}`);
+        const result = await exec.getExecOutput('docker', ['image', 'inspect', imageWithoutPrefix]);
+        core.info(`Image exists locally, will use it: ${imageWithoutPrefix}`);
+      } catch (inspectError) {
+        core.warning(`Image doesn't exist locally either! This might fail: ${inspectError.message}`);
+      }
     }
   } else {
     // Assume this is a regular Docker image name without protocol prefix
@@ -419,7 +428,31 @@ async function runDockerActionWithWitness(actionDir, actionConfig, witnessOption
   
   // Execute the command with witness attestation
   let output = "";
+  
+  // Dump complete debug information for Docker run command
+  core.info(`===== Docker Runner Debug Information =====`);
+  core.info(`Docker Image: ${dockerImage}`);
+  core.info(`Entrypoint: ${entrypoint || '(default)'}`);
+  core.info(`Args: ${args.join(' ') || '(none)'}`);
+  core.info(`Witness Path: ${witnessExePath}`);
+  core.info(`Working Directory: ${actionDir}`);
+  
+  // Print all arguments being passed to Docker run
+  core.info(`Docker run command: docker ${dockerRunArgs.join(' ')}`);
+  
+  // Print complete witness command
+  core.info(`Full witness command: ${witnessExePath} ${witnessArgs.join(' ')}`);
+  
+  // Print a few key environment variables for debugging
+  core.info(`Environment variables passed to container (sample):`);
+  ['GITHUB_WORKSPACE', 'GITHUB_OUTPUT', 'GITHUB_ENV'].forEach(key => {
+    core.info(`  ${key}=${process.env[key] || '(not set)'}`);
+  });
+  
   try {
+    // Verbose output for all witness command output
+    core.info(`Running witness command with Docker action...`);
+    
     await exec.exec(witnessExePath, witnessArgs, {
       cwd: actionDir,
       env: actionEnv || process.env,
@@ -428,22 +461,33 @@ async function runDockerActionWithWitness(actionDir, actionConfig, witnessOption
           const str = data.toString();
           output += str;
           
-          // Log witness-related debug info
-          if (str.includes('witness:') || str.includes('error:')) {
-            core.debug(`Witness output: ${str.trim()}`);
+          // Log all witness output for debugging
+          if (str.trim()) {
+            core.info(`Witness stdout: ${str.trim()}`);
           }
         },
         stderr: (data) => {
           const str = data.toString();
           output += str;
-          core.debug(`Witness stderr: ${str.trim()}`);
+          
+          // Always log stderr to help debug issues
+          if (str.trim()) {
+            core.warning(`Witness stderr: ${str.trim()}`);
+          }
         },
       },
     });
+    
+    core.info(`Witness command completed successfully`);
   } catch (error) {
     core.error(`Failed to execute Docker action with witness: ${error.message}`);
     core.error(`Witness args: ${witnessArgs.join(' ')}`);
     core.error(`Docker command: docker ${dockerRunArgs.join(' ')}`);
+    
+    // Dump additional error information if available
+    if (error.stdout) core.error(`Error stdout: ${error.stdout}`);
+    if (error.stderr) core.error(`Error stderr: ${error.stderr}`);
+    
     throw error;
   }
   
