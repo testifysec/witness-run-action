@@ -92,6 +92,13 @@ inputs:
   workingdir:
     description: "Directory from which commands will run"
     required: false
+  # Docker action-specific inputs that may be passed through
+  who-to-greet:
+    description: "Test input for Docker action"
+    required: false
+  message:
+    description: "Test input for Docker action"
+    required: false
 
 runs:
   using: "node20"

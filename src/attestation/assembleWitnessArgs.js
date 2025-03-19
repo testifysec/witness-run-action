@@ -40,19 +40,29 @@ function assembleWitnessArgs(witnessOptions, extraArgs = []) {
     cmd.push(`--signer-fulcio-url=${sigstoreFulcio}`);
     cmd.push(`--signer-fulcio-oidc-client-id=${sigstoreClientId}`);
     cmd.push(`--signer-fulcio-oidc-issuer=${sigstoreOidcIssuer}`);
+    
+    // Remove CI-specific OIDC flags that might not be supported in this version
+    // Just use the standard Sigstore flags
+    
     sigstoreTimestampServers.split(" ").forEach((ts) => {
       ts = ts.trim();
       if (ts.length > 0) {
         cmd.push(`--timestamp-servers=${ts}`);
       }
     });
-  } else if (timestampServers) {
-    timestampServers.split(" ").forEach((ts) => {
-      ts = ts.trim();
-      if (ts.length > 0) {
-        cmd.push(`--timestamp-servers=${ts}`);
-      }
-    });
+  } else {
+    // For non-sigstore runs, don't add any special flags
+    // witness will run without signers by default
+    
+    // Add timestamp servers if provided
+    if (timestampServers) {
+      timestampServers.split(" ").forEach((ts) => {
+        ts = ts.trim();
+        if (ts.length > 0) {
+          cmd.push(`--timestamp-servers=${ts}`);
+        }
+      });
+    }
   }
   
   if (attestations && attestations.length) {
@@ -91,7 +101,19 @@ function assembleWitnessArgs(witnessOptions, extraArgs = []) {
   if (trace) cmd.push(`--trace=${trace}`);
   if (outfile) cmd.push(`--outfile=${outfile}`);
   
-  return [...cmd, "--", ...extraArgs];
+  // Clean up extraArgs to ensure they're all strings
+  const cleanedExtraArgs = extraArgs.map(arg => {
+    // Convert null/undefined to empty string
+    if (arg === null || arg === undefined) {
+      return '';
+    }
+    // Convert to string for all other types
+    return String(arg);
+  });
+  
+  // Debug the exact arguments being passed
+  const fullCommandArgs = [...cmd, "--", ...cleanedExtraArgs];
+  return fullCommandArgs;
 }
 
 module.exports = assembleWitnessArgs;

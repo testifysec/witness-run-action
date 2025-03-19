@@ -12,16 +12,26 @@ const { detectActionType } = require("../actions/actionUtils");
 const { getActionYamlPath } = require("../actions/actionUtils");
 const {
   runJsActionWithWitness,
-  runCompositeActionWithWitness
+  runCompositeActionWithWitness,
+  runDockerActionWithWitness
 } = require("../actions/actionRunners");
 
 /**
  * Runs a wrapped GitHub Action using witness.
  * It reads the action's metadata, determines the type, and executes it with the appropriate handler.
+ * Optionally accepts a direct actionConfig parameter for cases like direct Docker containers.
  */
-async function runActionWithWitness(actionDir, witnessOptions, witnessExePath, actionEnv) {
-  const actionYmlPath = getActionYamlPath(actionDir);
-  const actionConfig = yaml.load(fs.readFileSync(actionYmlPath, 'utf8'));
+async function runActionWithWitness(actionDir, witnessOptions, witnessExePath, actionEnv, directActionConfig = null) {
+  // Use provided action config or load from file
+  let actionConfig = directActionConfig;
+  
+  if (!actionConfig) {
+    const actionYmlPath = getActionYamlPath(actionDir);
+    actionConfig = yaml.load(fs.readFileSync(actionYmlPath, 'utf8'));
+    core.info(`Loaded action config from ${actionYmlPath}`);
+  } else {
+    core.info(`Using provided direct action config`);
+  }
   
   const actionType = detectActionType(actionConfig);
   core.info(`Detected action type: ${actionType}`);
@@ -30,7 +40,7 @@ async function runActionWithWitness(actionDir, witnessOptions, witnessExePath, a
     case 'javascript':
       return await runJsActionWithWitness(actionDir, actionConfig, witnessOptions, witnessExePath, actionEnv);
     case 'docker':
-      throw new Error('Docker-based actions are not yet supported');
+      return await runDockerActionWithWitness(actionDir, actionConfig, witnessOptions, witnessExePath, actionEnv);
     case 'composite':
       return await runCompositeActionWithWitness(actionDir, actionConfig, witnessOptions, witnessExePath, actionEnv);
     default:

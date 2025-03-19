@@ -79,7 +79,7 @@ When wrapping an action:
 1. Specify the action reference using `action-ref` in the format `owner/repo@ref`
 2. Pass inputs to the wrapped action using the `input-` prefix
 3. You can also pass inputs directly if they don't conflict with witness-run's own inputs
-4. Both JavaScript-based actions and composite actions are supported
+4. JavaScript-based actions, composite actions, and Docker container actions are supported
 
 ## Composite Actions
 
@@ -181,6 +181,51 @@ You can run this composite action with witness-run-action using:
 2. **Path Resolution**: Scripts in composite actions can reference files in the action's directory using `${{ github.action_path }}`
 3. **Debug Flags**: Some actions (like `github-script`) require explicit debug parameters
 4. **Deeply Nested Actions**: The implementation supports multiple levels of action nesting (an action using another action that uses another action)
+
+## Docker Container Actions
+
+Starting from version 1.1.0, witness-run-action supports Docker container actions. This enables creating attestations for actions that run in Docker containers, either using Dockerfiles or pre-built Docker images.
+
+### Features
+
+- Support for Dockerfile-based actions
+- Support for pre-built Docker image actions (docker:// format)
+- Proper environment variable and input processing
+- Volume mapping to ensure access to GITHUB_WORKSPACE
+- Custom entrypoint support
+- Argument processing with GitHub expression substitution
+
+### Example of Running a Docker Action with Witness
+
+```yaml
+- name: Run Docker Action with Witness
+  uses: testifysec/witness-run-action@main
+  with:
+    step: "run-docker-action"
+    action-ref: "docker-action/example@v1"
+    input-parameter1: "value1"
+    input-parameter2: "value2"
+    enable-sigstore: true
+    enable-archivista: true
+```
+
+### Requirements
+
+- Docker must be installed and accessible on the runner
+- The runner must have sufficient permissions to run Docker containers
+- For Dockerfile-based actions, the Dockerfile must be present in the action repository
+
+### Technical Details
+
+When running Docker container actions, witness-run-action:
+
+1. Verifies Docker installation
+2. For Dockerfile-based actions: builds the Docker image from the Dockerfile in the action repository
+3. For pre-built images: pulls the Docker image from the registry
+4. Sets up proper volume mapping to ensure the container has access to the workspace files
+5. Configures environment variables based on inputs and GitHub environment
+6. Runs the container with witness attestation
+7. Captures the output and creates attestations
 
 ## Using Sigstore and Archivista Flags
 This action supports the use of Sigstore and Archivista for creating attestations.

@@ -95,6 +95,41 @@ class WitnessActionRunner {
   async executeAction(actionRef) {
     core.info(`Wrapping GitHub Action: ${actionRef}`);
     
+    // Check if this is a direct Docker image reference
+    if (actionRef.startsWith('docker://')) {
+      core.info(`Executing Docker action for direct image reference: ${actionRef}`);
+      
+      // Create a minimal action config for the Docker image
+      const command = core.getInput('command');
+      
+      // Create a synthetic action config for Docker
+      const actionConfig = {
+        name: 'Docker Image Action',
+        description: 'Docker container action',
+        runs: {
+          using: 'docker',
+          image: actionRef, // Keep the docker:// prefix for proper handling
+          args: command ? ['/bin/sh', '-c', command] : []
+        }
+      };
+      
+      // Get custom inputs to pass to Docker
+      const actionEnv = this.getWrappedActionEnv();
+      
+      // Use the workspace directory for running the Docker action
+      const workspaceDir = process.env.GITHUB_WORKSPACE || process.cwd();
+      
+      // Run as a Docker action with witness
+      core.info(`Running direct Docker image as a Docker action: ${actionRef}`);
+      return await runActionWithWitness(
+        workspaceDir,
+        this.witnessOptions,
+        this.witnessExePath,
+        actionEnv,
+        actionConfig  // Pass the synthetic action config directly
+      );
+    }
+    
     // Determine action directory - local or remote
     if (actionRef.startsWith('./') || actionRef.startsWith('../')) {
       this.actionDir = this.resolveLocalActionPath(actionRef);
@@ -211,19 +246,9 @@ class WitnessActionRunner {
    * All direct inputs are passed as "passed inputs".
    */
   getWrappedActionEnv() {
+    // Start with a copy of the current environment
     const newEnv = { ...process.env };
     const passedInputs = new Set();
-    
-    // Pass all direct inputs that are not part of witness options.
-    const witnessInputNames = new Set(
-      [
-        "witness-install-dir", "archivista-server", "attestations", "attestor-link-export", "attestor-maven-pom-path",
-        "attestor-sbom-export", "attestor-slsa-export", "enable-sigstore", "command", "certificate", "enable-archivista",
-        "fulcio", "fulcio-oidc-client-id", "fulcio-oidc-issuer", "fulcio-token", "intermediates", "key", "outfile",
-        "product-exclude-glob", "product-include-glob", "spiffe-socket", "step", "timestamp-servers", "trace", "version",
-        "workingdir", "action-ref"
-      ].map(name => name.toLowerCase())
-    );
     
     // Debug: Log existing environment variables that might be relevant
     core.info('Debug: Environment variables in getWrappedActionEnv:');
@@ -233,16 +258,28 @@ class WitnessActionRunner {
       }
     });
     
+    // Pass through ALL environment variables, including inputs
+    // This avoids any filtering and ensures Docker containers get all the inputs they need
+    
+    // Log all inputs for debugging purposes
+    const allInputs = [];
     for (const key in process.env) {
-      const match = key.match(/^INPUT_(.+)$/);
-      if (match) {
-        const inputName = match[1].toLowerCase();
-        if (!witnessInputNames.has(inputName) && !passedInputs.has(inputName)) {
-          core.info(`Passing direct input to wrapped action: ${inputName}=${process.env[key]}`);
+      if (key.startsWith('INPUT_')) {
+        const inputName = key.substring(6).toLowerCase();
+        if (!passedInputs.has(inputName)) {
+          allInputs.push(`${inputName}=${process.env[key]}`);
           passedInputs.add(inputName);
         }
       }
     }
+    
+    if (allInputs.length > 0) {
+      core.info(`Passing direct input to wrapped action: ${allInputs.length} inputs`);
+      core.debug(`Inputs: ${allInputs.join(', ')}`);
+    } else {
+      core.info('No inputs to pass to wrapped action');
+    }
+    
     return newEnv;
   }
 }
