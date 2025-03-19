@@ -1,0 +1,69 @@
+/**
+ * Command execution functionality for running actions and commands with Witness
+ */
+const core = require("@actions/core");
+const exec = require("@actions/exec");
+const fs = require("fs");
+const path = require("path");
+const yaml = require("js-yaml");
+
+const assembleWitnessArgs = require("../attestation/assembleWitnessArgs");
+const { detectActionType } = require("../actions/actionUtils");
+const { getActionYamlPath } = require("../actions/actionUtils");
+const {
+  runJsActionWithWitness,
+  runCompositeActionWithWitness
+} = require("../actions/actionRunners");
+
+/**
+ * Runs a wrapped GitHub Action using witness.
+ * It reads the action's metadata, determines the type, and executes it with the appropriate handler.
+ */
+async function runActionWithWitness(actionDir, witnessOptions, witnessExePath, actionEnv) {
+  const actionYmlPath = getActionYamlPath(actionDir);
+  const actionConfig = yaml.load(fs.readFileSync(actionYmlPath, 'utf8'));
+  
+  const actionType = detectActionType(actionConfig);
+  core.info(`Detected action type: ${actionType}`);
+  
+  switch (actionType) {
+    case 'javascript':
+      return await runJsActionWithWitness(actionDir, actionConfig, witnessOptions, witnessExePath, actionEnv);
+    case 'docker':
+      throw new Error('Docker-based actions are not yet supported');
+    case 'composite':
+      return await runCompositeActionWithWitness(actionDir, actionConfig, witnessOptions, witnessExePath, actionEnv);
+    default:
+      throw new Error(`Unsupported action type: ${actionType}`);
+  }
+}
+
+/**
+ * Runs a direct command using witness.
+ */
+async function runDirectCommandWithWitness(command, witnessOptions, witnessExePath) {
+  const commandArray = command.match(/(?:[^\s"]+|"[^"]*")+/g) || [command];
+  const args = assembleWitnessArgs(witnessOptions, commandArray);
+  core.info(`Running witness command: ${witnessExePath} ${args.join(" ")}`);
+
+  let output = "";
+  await exec.exec(witnessExePath, args, {
+    cwd: process.env.GITHUB_WORKSPACE || process.cwd(),
+    env: process.env,
+    listeners: {
+      stdout: (data) => {
+        output += data.toString();
+      },
+      stderr: (data) => {
+        output += data.toString();
+      },
+    },
+  });
+  
+  return output;
+}
+
+module.exports = {
+  runActionWithWitness,
+  runDirectCommandWithWitness
+};
