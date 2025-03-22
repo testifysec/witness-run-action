@@ -33930,9 +33930,6 @@ class WitnessActionRunner {
       }
     });
     
-    // Pass through ALL environment variables, including inputs
-    // This avoids any filtering and ensures Docker containers get all the inputs they need
-    
     // Process inputs, with special handling for boolean values and input- prefixed inputs
     const allInputs = [];
     for (const key in process.env) {
@@ -33948,13 +33945,16 @@ class WitnessActionRunner {
           // Create a new environment variable with the correct name
           const newKey = `INPUT_${inputName.toUpperCase().replace(/-/g, '_')}`;
           
-          // Format boolean values to YAML 1.2 compliant format
+          // Format boolean values for YAML 1.2 compliance
+          // IMPORTANT: For GitHub Actions, booleans are actually passed as strings
+          // So we need to use the string "true" or "false" (not true/false JS booleans)
           if (typeof inputValue === 'string') {
             const lowerValue = inputValue.toLowerCase();
             if (lowerValue === 'true' || lowerValue === 'false') {
-              // Use lowercase for boolean values to comply with YAML 1.2 spec
-              inputValue = lowerValue;
-              core.info(`Normalized boolean value for ${inputName}: ${inputValue}`);
+              // Keep as string but in proper case format - THIS IS KEY
+              // Using the string "true"/"false" rather than lowercase
+              inputValue = lowerValue === 'true' ? 'true' : 'false';
+              core.info(`Normalized boolean string for ${inputName}: "${inputValue}"`);
             }
           }
           
@@ -33969,10 +33969,10 @@ class WitnessActionRunner {
           if (typeof inputValue === 'string') {
             const lowerValue = inputValue.toLowerCase();
             if (lowerValue === 'true' || lowerValue === 'false') {
-              // Update the value to ensure it's in lowercase format
-              newEnv[key] = lowerValue;
-              inputValue = lowerValue;
-              core.info(`Normalized boolean value for ${inputName}: ${inputValue}`);
+              // Keep as string but in proper format
+              inputValue = lowerValue === 'true' ? 'true' : 'false';
+              newEnv[key] = inputValue;
+              core.info(`Normalized boolean string for ${inputName}: "${inputValue}"`);
             }
           }
         }
