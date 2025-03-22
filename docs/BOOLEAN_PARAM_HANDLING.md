@@ -22,7 +22,7 @@ Witness-run-action implements special handling for boolean parameters to ensure 
 ### Implementation Details
 
 For known boolean parameters (e.g., `install-only`, `skip-validate`, `debug`):
-- Convert to uppercase `TRUE` or `FALSE` format to comply with YAML 1.2 Core Schema
+- Convert to lowercase `true` or `false` format for GoReleaser and similar actions
 - Apply this normalization for both regular and input-prefixed parameters
 
 For other boolean-like parameters:
@@ -38,7 +38,7 @@ When using witness-run-action to wrap other actions, you can use any of these fo
 - uses: testifysec/witness-run-action@main
   with:
     action-ref: "some/action@v1"
-    input-some-boolean-param: "TRUE"  # or "FALSE" (uppercase and quoted)
+    input-some-boolean-param: "true"  # or "false" (lowercase and quoted)
     
 # Alternative formats that will be normalized automatically
 - uses: testifysec/witness-run-action@main

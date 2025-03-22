@@ -260,7 +260,8 @@ class WitnessActionRunner {
     });
     
     // Known boolean inputs from various actions that we need to handle specially
-    const knownBooleanInputs = new Set([
+    // GoReleaser action requires lowercase "true" or "false" specifically
+    const lowercaseBooleanInputs = new Set([
       'install-only',      // goreleaser action
       'skip-validate',     // common in many actions
       'skip-cache',        // common in many actions
@@ -286,15 +287,14 @@ class WitnessActionRunner {
           const newKey = `INPUT_${inputName.toUpperCase().replace(/-/g, '_')}`;
           
           // Special handling for known boolean inputs from actions
-          // For these we need to use explicitly TRUE or FALSE (uppercase)
-          // to ensure proper YAML 1.2 compliance
-          if (knownBooleanInputs.has(inputName)) {
+          // For GoReleaser action and similar, we need to use lowercase "true" or "false"
+          if (lowercaseBooleanInputs.has(inputName)) {
             if (typeof inputValue === 'string') {
               const lowerValue = inputValue.toLowerCase();
               if (lowerValue === 'true' || lowerValue === 'false') {
-                // For known boolean inputs, use explicit TRUE/FALSE to match YAML spec
-                inputValue = lowerValue === 'true' ? 'TRUE' : 'FALSE';
-                core.info(`Enhanced boolean format for ${inputName}: "${inputValue}"`);
+                // For GoReleaser and similar, use lowercase true/false
+                inputValue = lowerValue;
+                core.info(`Using lowercase boolean for ${inputName}: "${inputValue}"`);
               }
             }
           }
@@ -316,14 +316,14 @@ class WitnessActionRunner {
         // For standard inputs, ensure boolean values are correctly formatted
         else {
           // Special handling for known boolean inputs
-          if (knownBooleanInputs.has(inputName)) {
+          if (lowercaseBooleanInputs.has(inputName)) {
             if (typeof inputValue === 'string') {
               const lowerValue = inputValue.toLowerCase();
               if (lowerValue === 'true' || lowerValue === 'false') {
-                // For known boolean inputs, use explicit TRUE/FALSE
-                inputValue = lowerValue === 'true' ? 'TRUE' : 'FALSE';
+                // For GoReleaser and similar, use lowercase true/false
+                inputValue = lowerValue;
                 newEnv[key] = inputValue;
-                core.info(`Enhanced boolean format for ${inputName}: "${inputValue}"`);
+                core.info(`Using lowercase boolean for ${inputName}: "${inputValue}"`);
               }
             }
           }
