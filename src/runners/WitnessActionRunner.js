@@ -244,6 +244,7 @@ class WitnessActionRunner {
   /**
    * Prepares the environment variables to be passed to a wrapped action.
    * All direct inputs are passed as "passed inputs".
+   * Properly formats boolean values to comply with YAML 1.2 specification.
    */
   getWrappedActionEnv() {
     // Start with a copy of the current environment
@@ -261,13 +262,52 @@ class WitnessActionRunner {
     // Pass through ALL environment variables, including inputs
     // This avoids any filtering and ensures Docker containers get all the inputs they need
     
-    // Log all inputs for debugging purposes
+    // Process inputs, with special handling for boolean values and input- prefixed inputs
     const allInputs = [];
     for (const key in process.env) {
       if (key.startsWith('INPUT_')) {
-        const inputName = key.substring(6).toLowerCase();
+        // Get the original input name and value
+        let inputName = key.substring(6).toLowerCase();
+        let inputValue = process.env[key];
+        
+        // Handle input- prefixed inputs by stripping the prefix
+        if (inputName.startsWith('input-')) {
+          inputName = inputName.substring(6); // Remove 'input-' prefix
+          
+          // Create a new environment variable with the correct name
+          const newKey = `INPUT_${inputName.toUpperCase().replace(/-/g, '_')}`;
+          
+          // Format boolean values to YAML 1.2 compliant format
+          if (typeof inputValue === 'string') {
+            const lowerValue = inputValue.toLowerCase();
+            if (lowerValue === 'true' || lowerValue === 'false') {
+              // Use lowercase for boolean values to comply with YAML 1.2 spec
+              inputValue = lowerValue;
+              core.info(`Normalized boolean value for ${inputName}: ${inputValue}`);
+            }
+          }
+          
+          // Set the new environment variable and remove the old one
+          newEnv[newKey] = inputValue;
+          delete newEnv[key];
+          
+          core.debug(`Mapped input-prefixed parameter: ${key} -> ${newKey}`);
+        } 
+        // For standard inputs, ensure boolean values are correctly formatted
+        else {
+          if (typeof inputValue === 'string') {
+            const lowerValue = inputValue.toLowerCase();
+            if (lowerValue === 'true' || lowerValue === 'false') {
+              // Update the value to ensure it's in lowercase format
+              newEnv[key] = lowerValue;
+              inputValue = lowerValue;
+              core.info(`Normalized boolean value for ${inputName}: ${inputValue}`);
+            }
+          }
+        }
+        
         if (!passedInputs.has(inputName)) {
-          allInputs.push(`${inputName}=${process.env[key]}`);
+          allInputs.push(`${inputName}=${inputValue}`);
           passedInputs.add(inputName);
         }
       }
