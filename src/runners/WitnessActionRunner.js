@@ -259,16 +259,8 @@ class WitnessActionRunner {
       }
     });
     
-    // Known boolean inputs from various actions that we need to handle specially
-    // GoReleaser action requires lowercase "true" or "false" specifically
-    const lowercaseBooleanInputs = new Set([
-      'install-only',      // goreleaser action
-      'skip-validate',     // common in many actions
-      'skip-cache',        // common in many actions
-      'debug',             // common in many actions
-      'disable-sandbox',   // common in many actions
-      'dry-run'            // common in many actions
-    ]);
+    // Instead of a predefined list, we'll detect boolean values dynamically
+    // based on their value pattern (true/false) and normalize them to lowercase
     
     // Process inputs, with special handling for boolean values and input- prefixed inputs
     const allInputs = [];
@@ -286,24 +278,14 @@ class WitnessActionRunner {
           // Create a new environment variable with the correct name
           const newKey = `INPUT_${inputName.toUpperCase().replace(/-/g, '_')}`;
           
-          // Special handling for known boolean inputs from actions
-          // For GoReleaser action and similar, we need to use lowercase "true" or "false"
-          if (lowercaseBooleanInputs.has(inputName)) {
-            if (typeof inputValue === 'string') {
-              const lowerValue = inputValue.toLowerCase();
-              if (lowerValue === 'true' || lowerValue === 'false') {
-                // For GoReleaser and similar, use lowercase true/false
-                inputValue = lowerValue;
-                core.info(`Using lowercase boolean for ${inputName}: "${inputValue}"`);
-              }
-            }
-          }
-          // Regular boolean normalization for other inputs
-          else if (typeof inputValue === 'string') {
+          // Detect and normalize any boolean-like values to lowercase true/false
+          if (typeof inputValue === 'string') {
             const lowerValue = inputValue.toLowerCase();
             if (lowerValue === 'true' || lowerValue === 'false') {
-              inputValue = lowerValue === 'true' ? 'true' : 'false';
-              core.info(`Normalized boolean string for ${inputName}: "${inputValue}"`);
+              // Apply consistent lowercase format for all boolean values
+              // This matches the YAML 1.2 Core Schema expected format
+              inputValue = lowerValue;
+              core.info(`Normalized boolean parameter ${inputName}: "${inputValue}"`);
             }
           }
           
@@ -315,25 +297,15 @@ class WitnessActionRunner {
         } 
         // For standard inputs, ensure boolean values are correctly formatted
         else {
-          // Special handling for known boolean inputs
-          if (lowercaseBooleanInputs.has(inputName)) {
-            if (typeof inputValue === 'string') {
-              const lowerValue = inputValue.toLowerCase();
-              if (lowerValue === 'true' || lowerValue === 'false') {
-                // For GoReleaser and similar, use lowercase true/false
-                inputValue = lowerValue;
-                newEnv[key] = inputValue;
-                core.info(`Using lowercase boolean for ${inputName}: "${inputValue}"`);
-              }
-            }
-          }
-          // Regular boolean normalization for other inputs
-          else if (typeof inputValue === 'string') {
+          // Detect and normalize any boolean-like values to lowercase true/false
+          if (typeof inputValue === 'string') {
             const lowerValue = inputValue.toLowerCase();
             if (lowerValue === 'true' || lowerValue === 'false') {
-              inputValue = lowerValue === 'true' ? 'true' : 'false';
+              // Apply consistent lowercase format for all boolean values
+              // This matches the YAML 1.2 Core Schema expected format
+              inputValue = lowerValue;
               newEnv[key] = inputValue;
-              core.info(`Normalized boolean string for ${inputName}: "${inputValue}"`);
+              core.info(`Normalized boolean parameter ${inputName}: "${inputValue}"`);
             }
           }
         }
