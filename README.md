@@ -77,9 +77,11 @@ jobs:
 
 When wrapping an action:
 1. Specify the action reference using `action-ref` in the format `owner/repo@ref`
-2. Pass inputs to the wrapped action using the `input-` prefix
+2. Pass inputs to the wrapped action using the `input-` prefix or directly (recommended for boolean parameters)
 3. You can also pass inputs directly if they don't conflict with witness-run's own inputs
 4. JavaScript-based actions, composite actions, and Docker container actions are supported
+
+> **Important Note on Boolean Parameters**: When passing boolean parameters to wrapped actions, it's recommended to use the direct approach (without the `input-` prefix) to ensure proper YAML validation. See [Boolean Parameter Handling](docs/BOOLEAN_PARAM_HANDLING.md) for details.
 
 ## Composite Actions
 

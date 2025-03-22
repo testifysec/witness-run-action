@@ -244,7 +244,8 @@ class WitnessActionRunner {
   /**
    * Prepares the environment variables to be passed to a wrapped action.
    * All direct inputs are passed as "passed inputs".
-   * Properly formats boolean values to comply with YAML 1.2 specification.
+   * Handles both direct parameters and input-prefixed parameters.
+   * Preserves original boolean values to maintain YAML 1.2 compliance.
    */
   getWrappedActionEnv() {
     // Start with a copy of the current environment
@@ -259,10 +260,7 @@ class WitnessActionRunner {
       }
     });
     
-    // Instead of a predefined list, we'll detect boolean values dynamically
-    // based on their value pattern (true/false) and normalize them to lowercase
-    
-    // Process inputs, with special handling for boolean values and input- prefixed inputs
+    // Process inputs, with special handling for input- prefixed inputs
     const allInputs = [];
     for (const key in process.env) {
       if (key.startsWith('INPUT_')) {
@@ -278,37 +276,17 @@ class WitnessActionRunner {
           // Create a new environment variable with the correct name
           const newKey = `INPUT_${inputName.toUpperCase().replace(/-/g, '_')}`;
           
-          // Detect and normalize any boolean-like values to lowercase true/false
-          if (typeof inputValue === 'string') {
-            const lowerValue = inputValue.toLowerCase();
-            if (lowerValue === 'true' || lowerValue === 'false') {
-              // Apply consistent lowercase format for all boolean values
-              // This matches the YAML 1.2 Core Schema expected format
-              inputValue = lowerValue;
-              core.info(`Normalized boolean parameter ${inputName}: "${inputValue}"`);
-            }
-          }
+          // IMPORTANT: Preserve the original value exactly as-is
+          // This ensures boolean values keep their original format
+          // which is essential for YAML 1.2 Core Schema compliance
           
           // Set the new environment variable and remove the old one
           newEnv[newKey] = inputValue;
           delete newEnv[key];
           
           core.debug(`Mapped input-prefixed parameter: ${originalName} -> ${inputName} (env: ${key} -> ${newKey})`);
-        } 
-        // For standard inputs, ensure boolean values are correctly formatted
-        else {
-          // Detect and normalize any boolean-like values to lowercase true/false
-          if (typeof inputValue === 'string') {
-            const lowerValue = inputValue.toLowerCase();
-            if (lowerValue === 'true' || lowerValue === 'false') {
-              // Apply consistent lowercase format for all boolean values
-              // This matches the YAML 1.2 Core Schema expected format
-              inputValue = lowerValue;
-              newEnv[key] = inputValue;
-              core.info(`Normalized boolean parameter ${inputName}: "${inputValue}"`);
-            }
-          }
         }
+        // Do not modify non-prefixed inputs at all - they're already in the correct format
         
         if (!passedInputs.has(inputName)) {
           allInputs.push(`${inputName}=${inputValue}`);

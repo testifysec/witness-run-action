@@ -1,73 +1,58 @@
-# Boolean Parameter Handling in GitHub Actions
+# Boolean Parameter Handling in witness-run-action
 
-This document explains how witness-run-action handles boolean parameters when wrapping other GitHub Actions.
+This document explains how to correctly handle boolean parameters when using the witness-run-action to wrap other GitHub Actions.
 
-## The Problem
+## The Issue
 
-GitHub Actions has inconsistent handling of boolean values across different contexts. The root issue is:
+GitHub Actions uses the YAML 1.2 Core Schema specification for parameter validation. According to this schema, boolean values must be one of the following:
+- `true` or `false` (lowercase)
+- `True` or `False` (title case)
+- `TRUE` or `FALSE` (uppercase)
+- `y`, `Y`, `yes`, `Yes`, `YES`, `n`, `N`, `no`, `No`, `NO`, `on`, `On`, `ON`, `off`, `Off`, `OFF`
 
-1. GitHub Actions' YAML parser follows the YAML 1.2 "Core Schema" specification
-2. This specification has strict requirements for boolean values
-3. Different actions may process boolean values differently
-4. When wrapping actions, boolean values may not propagate correctly between layers
+When wrapping actions using `witness-run-action`, there are two ways to pass parameters to the wrapped action:
 
-## Our Solution
+1. With the `input-` prefix: `input-parameter-name: value`
+2. Directly (no prefix): `parameter-name: value`
 
-Witness-run-action implements special handling for boolean parameters to ensure compatibility:
+## Recommended Approach
 
-1. **Known Boolean Parameters**: We maintain a list of common boolean parameters from popular actions 
-2. **Format Normalization**: We apply different formats based on the parameter type
-3. **Input Prefixing**: We handle the `input-` prefix correctly to remove it before passing to wrapped actions
+**For boolean parameters, we strongly recommend using the direct approach (without the `input-` prefix).**
 
-### Implementation Details
-
-For known boolean parameters (e.g., `install-only`, `skip-validate`, `debug`):
-- Convert to lowercase `true` or `false` format for GoReleaser and similar actions
-- Apply this normalization for both regular and input-prefixed parameters
-
-For other boolean-like parameters:
-- Normalize to lowercase `true` or `false` for compatibility with most actions
-- Apply consistent handling regardless of input method
-
-## Usage Patterns
-
-When using witness-run-action to wrap other actions, you can use any of these formats:
+### Example:
 
 ```yaml
-# Recommended format for known boolean parameters (most compatible)
-- uses: testifysec/witness-run-action@main
+# RECOMMENDED: Direct parameters (no input- prefix)
+- uses: testifysec/witness-run-action@v1
   with:
-    action-ref: "some/action@v1"
-    input-some-boolean-param: "true"  # or "false" (lowercase and quoted)
+    action-ref: goreleaser/goreleaser-action@v5
+    install-only: true    # Boolean parameter passed directly
     
-# Alternative formats that will be normalized automatically
-- uses: testifysec/witness-run-action@main
+# NOT RECOMMENDED: With input- prefix
+- uses: testifysec/witness-run-action@v1
   with:
-    action-ref: "some/action@v1"
-    input-some-boolean-param: "true"  # or "false" (lowercase and quoted)
-    
-# YAML native format (will be normalized internally)
-- uses: testifysec/witness-run-action@main
-  with:
-    action-ref: "some/action@v1"
-    input-some-boolean-param: true  # or false (unquoted YAML boolean)
+    action-ref: goreleaser/goreleaser-action@v5
+    input-install-only: true  # This can cause issues with some actions
 ```
 
-## Known Boolean Parameters
+## Technical Details
 
-We maintain a list of common boolean parameters that receive special handling:
+When parameters are passed with the `input-` prefix, `witness-run-action` performs processing on these parameters and then passes them to the wrapped action. This processing can cause issues with boolean values because:
 
-- `install-only` (GoReleaser action)
-- `skip-validate` (common in many actions)
-- `skip-cache` (common in many actions)
-- `debug` (common in many actions)
-- `disable-sandbox` (common in many actions)
-- `dry-run` (common in many actions)
+1. The wrapped action expects boolean values to conform to the YAML 1.2 Core Schema
+2. Any transformation of these values might make them incompatible with this schema
 
-## Troubleshooting
+By using direct parameters (without the `input-` prefix), you bypass the intermediate processing, and GitHub Actions handles the parameter validation correctly according to the YAML 1.2 specification.
 
-If you encounter issues with boolean parameters:
+## When to Use Input Prefixing
 
-1. Try using the uppercase quoted format: `"TRUE"` or `"FALSE"`
-2. Check if the parameter should be added to our known boolean parameters list
-3. Fall back to the command-based approach if needed
+The `input-` prefix is still useful in certain scenarios:
+
+- When you need to explicitly namespace parameters to avoid conflicts
+- For string or numeric parameters that don't have strict validation requirements
+
+However, for boolean parameters, you should prefer the direct approach to ensure proper validation.
+
+## Compatibility
+
+This approach is compatible with all versions of `witness-run-action`. The recommended approach will work with both older and newer versions of the action.
