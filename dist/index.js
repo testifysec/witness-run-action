@@ -33930,6 +33930,16 @@ class WitnessActionRunner {
       }
     });
     
+    // Known boolean inputs from various actions that we need to handle specially
+    const knownBooleanInputs = new Set([
+      'install-only',      // goreleaser action
+      'skip-validate',     // common in many actions
+      'skip-cache',        // common in many actions
+      'debug',             // common in many actions
+      'disable-sandbox',   // common in many actions
+      'dry-run'            // common in many actions
+    ]);
+    
     // Process inputs, with special handling for boolean values and input- prefixed inputs
     const allInputs = [];
     for (const key in process.env) {
@@ -33940,19 +33950,29 @@ class WitnessActionRunner {
         
         // Handle input- prefixed inputs by stripping the prefix
         if (inputName.startsWith('input-')) {
+          const originalName = inputName;
           inputName = inputName.substring(6); // Remove 'input-' prefix
           
           // Create a new environment variable with the correct name
           const newKey = `INPUT_${inputName.toUpperCase().replace(/-/g, '_')}`;
           
-          // Format boolean values for YAML 1.2 compliance
-          // IMPORTANT: For GitHub Actions, booleans are actually passed as strings
-          // So we need to use the string "true" or "false" (not true/false JS booleans)
-          if (typeof inputValue === 'string') {
+          // Special handling for known boolean inputs from actions
+          // For these we need to use explicitly TRUE or FALSE (uppercase)
+          // to ensure proper YAML 1.2 compliance
+          if (knownBooleanInputs.has(inputName)) {
+            if (typeof inputValue === 'string') {
+              const lowerValue = inputValue.toLowerCase();
+              if (lowerValue === 'true' || lowerValue === 'false') {
+                // For known boolean inputs, use explicit TRUE/FALSE to match YAML spec
+                inputValue = lowerValue === 'true' ? 'TRUE' : 'FALSE';
+                core.info(`Enhanced boolean format for ${inputName}: "${inputValue}"`);
+              }
+            }
+          }
+          // Regular boolean normalization for other inputs
+          else if (typeof inputValue === 'string') {
             const lowerValue = inputValue.toLowerCase();
             if (lowerValue === 'true' || lowerValue === 'false') {
-              // Keep as string but in proper case format - THIS IS KEY
-              // Using the string "true"/"false" rather than lowercase
               inputValue = lowerValue === 'true' ? 'true' : 'false';
               core.info(`Normalized boolean string for ${inputName}: "${inputValue}"`);
             }
@@ -33962,14 +33982,26 @@ class WitnessActionRunner {
           newEnv[newKey] = inputValue;
           delete newEnv[key];
           
-          core.debug(`Mapped input-prefixed parameter: ${key} -> ${newKey}`);
+          core.debug(`Mapped input-prefixed parameter: ${originalName} -> ${inputName} (env: ${key} -> ${newKey})`);
         } 
         // For standard inputs, ensure boolean values are correctly formatted
         else {
-          if (typeof inputValue === 'string') {
+          // Special handling for known boolean inputs
+          if (knownBooleanInputs.has(inputName)) {
+            if (typeof inputValue === 'string') {
+              const lowerValue = inputValue.toLowerCase();
+              if (lowerValue === 'true' || lowerValue === 'false') {
+                // For known boolean inputs, use explicit TRUE/FALSE
+                inputValue = lowerValue === 'true' ? 'TRUE' : 'FALSE';
+                newEnv[key] = inputValue;
+                core.info(`Enhanced boolean format for ${inputName}: "${inputValue}"`);
+              }
+            }
+          }
+          // Regular boolean normalization for other inputs
+          else if (typeof inputValue === 'string') {
             const lowerValue = inputValue.toLowerCase();
             if (lowerValue === 'true' || lowerValue === 'false') {
-              // Keep as string but in proper format
               inputValue = lowerValue === 'true' ? 'true' : 'false';
               newEnv[key] = inputValue;
               core.info(`Normalized boolean string for ${inputName}: "${inputValue}"`);
