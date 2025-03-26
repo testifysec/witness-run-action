@@ -89,7 +89,7 @@ async function executeCompositeShellStep(step, actionDir, witnessOptions, witnes
   // Pass the command array directly, no need for regex parsing which could introduce security issues
   const commandArray = shellCommand;
   const args = assembleWitnessArgs(witnessOptions, commandArray);
-  core.info(`Running witness command: ${witnessExePath} ${args.join(" ")}`);
+  // Command details not logged to protect secrets
 
   let output = "";
   try {
@@ -158,7 +158,7 @@ async function executeCompositeUsesStep(step, parentActionDir, witnessOptions, w
       
       const inputKey = `INPUT_${inputName.replace(/-/g, '_').toUpperCase()}`;
       nestedEnv[inputKey] = processedValue;
-      core.info(`Setting nested action input: ${inputName}=${processedValue}`);
+      // Don't log input values to prevent exposing secrets
       
       // Debug logging about what keys we're setting
       core.debug(`Added env var '${inputKey}' with value type '${typeof processedValue}'`);

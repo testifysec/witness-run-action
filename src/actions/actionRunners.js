@@ -88,7 +88,7 @@ async function runJsActionWithWitness(actionDir, actionConfig, witnessOptions, w
 
   // Create absolute path for the entry file
   const args = assembleWitnessArgs(witnessOptions, ["node", entryFile]);
-  core.info(`Running witness command: ${witnessExePath} ${args.join(" ")}`);
+  // Command details not logged to protect secrets
 
   let output = "";
   // Use GitHub workspace as the working directory
@@ -169,17 +169,14 @@ async function runJsActionWithWitness(actionDir, actionConfig, witnessOptions, w
 
   
 
-  // Log the exact command we're about to run
-  core.info(`DEBUG - About to execute: ${witnessExePath} ${args.join(' ')}`);
+  // Log that we're executing the witness command, but not the full command with arguments
+  // that might contain sensitive information
+  core.info(`DEBUG - About to execute witness command`);
   
   //debug log nodenv
 
 
-  //log the environment variables
-  core.info(`DEBUG - Environment variables:`);
-  Object.keys(nodeEnv).forEach(key => {
-      core.info(`  ${key}=${nodeEnv[key]}`);
-  });
+  // Environment variables are not logged to protect secrets
 
   
   await exec.exec(witnessExePath, args, {
@@ -262,13 +259,7 @@ async function runCompositeActionWithWitness(actionDir, actionConfig, witnessOpt
     }
   }
   
-  // Debug: Log environment variables for troubleshooting
-  core.info(`Environment variables passed to step (input-related only):`);
-  Object.keys(runEnv)
-    .filter(key => key.startsWith('INPUT_'))
-    .forEach(key => {
-      core.info(`  ${key}=${runEnv[key]}`);
-    });
+  // Environment variables are not logged to protect secrets
   
   // Execute each step sequentially
   for (let i = 0; i < steps.length; i++) {
@@ -523,7 +514,7 @@ async function runDockerActionWithWitness(actionDir, actionConfig, witnessOption
     core.warning(`Failed to create GitHub paths: ${error.message}`);
   }
   
-  // Add environment variables
+  // Add environment variables without logging them
   for (const [key, value] of Object.entries(runEnv)) {
     if (value !== undefined && value !== null) {
       dockerRunArgs.push('-e', `${key}=${value}`);
@@ -558,7 +549,7 @@ async function runDockerActionWithWitness(actionDir, actionConfig, witnessOption
   
   // Construct the witness command
   const witnessArgs = assembleWitnessArgs(witnessOptions, ['docker', ...dockerRunArgs]);
-  core.info(`Running witness command: ${witnessExePath} ${witnessArgs.join(" ")}`);
+  // Command details not logged to protect secrets
   
   // Add more debug information about witness and environment
   core.debug(`Witness executable path: ${witnessExePath}`);
@@ -576,17 +567,13 @@ async function runDockerActionWithWitness(actionDir, actionConfig, witnessOption
   core.info(`Witness Path: ${witnessExePath}`);
   core.info(`Working Directory: ${actionDir}`);
   
-  // Print all arguments being passed to Docker run
-  core.info(`Docker run command: docker ${dockerRunArgs.join(' ')}`);
+  // Don't log Docker run command with arguments that might contain secrets
   
-  // Print complete witness command
-  core.info(`Full witness command: ${witnessExePath} ${witnessArgs.join(' ')}`);
+  // Don't log the full witness command to avoid exposing secrets
   
-  // Print a few key environment variables for debugging
-  core.info(`Environment variables passed to container (sample):`);
-  ['GITHUB_WORKSPACE', 'GITHUB_OUTPUT', 'GITHUB_ENV'].forEach(key => {
-    core.info(`  ${key}=${process.env[key] || '(not set)'}`);
-  });
+  // Only log non-sensitive path information
+  core.info(`GITHUB_WORKSPACE path: ${process.env['GITHUB_WORKSPACE'] || '(not set)'}`);
+  // No need to log other environment variables
   
   try {
     // Verbose output for all witness command output
@@ -620,8 +607,7 @@ async function runDockerActionWithWitness(actionDir, actionConfig, witnessOption
     core.info(`Witness command completed successfully`);
   } catch (error) {
     core.error(`Failed to execute Docker action with witness: ${error.message}`);
-    core.error(`Witness args: ${witnessArgs.join(' ')}`);
-    core.error(`Docker command: docker ${dockerRunArgs.join(' ')}`);
+    // Don't log command arguments that may contain secrets
     
     // Dump additional error information if available
     if (error.stdout) core.error(`Error stdout: ${error.stdout}`);

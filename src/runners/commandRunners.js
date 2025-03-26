@@ -42,7 +42,8 @@ async function runActionWithWitness(actionDir, witnessOptions, witnessExePath, a
     const appliedDefaults = applyDefaultsFromActionYml(actionEnv, actionConfig.inputs, witnessParams);
     
     if (appliedDefaults.length > 0) {
-      core.info(`Applied ${appliedDefaults.length} default values from action.yml: ${appliedDefaults.join(', ')}`);
+      core.info(`Applied ${appliedDefaults.length} default values from action.yml`);
+      // Don't log the actual default values to avoid exposing potential secrets
     }
     
 
@@ -72,7 +73,7 @@ async function runActionWithWitness(actionDir, witnessOptions, witnessExePath, a
 async function runDirectCommandWithWitness(command, witnessOptions, witnessExePath) {
   const commandArray = command.match(/(?:[^\s"]+|"[^"]*")+/g) || [command];
   const args = assembleWitnessArgs(witnessOptions, commandArray);
-  core.info(`Running witness command: ${witnessExePath} ${args.join(" ")}`);
+  // Command details not logged to protect secrets
 
   let output = "";
   await exec.exec(witnessExePath, args, {
