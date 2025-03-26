@@ -1,0 +1,107 @@
+name: Test Input Prefix Handling
+
+on:
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  id-token: write # Required for requesting JWT
+  contents: read  # Required for actions/checkout
+
+jobs:
+  test-input-prefix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+        
+      # Create a simple JavaScript action that will echo the inputs it receives
+      - name: Create test JavaScript action
+        run: |
+          mkdir -p .github/actions/test-js-action
+          
+          cat > .github/actions/test-js-action/action.yml << 'EOF'
+          name: 'Input Echo Action'
+          description: 'Echo all inputs'
+          inputs:
+            standard-input:
+              description: 'A standard input'
+              required: false
+              default: 'default value'
+            another-input:
+              description: 'Another standard input'
+              required: false
+          outputs:
+            received-inputs:
+              description: "JSON of all inputs received"
+              value: ${{ steps.inputs-json.outputs.inputs-json }}
+          runs:
+            using: "node20"
+            main: "index.js"
+          EOF
+          
+          cat > .github/actions/test-js-action/index.js << 'EOF'
+          const core = require('@actions/core');
+          
+          try {
+            // Get all inputs
+            const standardInput = core.getInput('standard-input');
+            const anotherInput = core.getInput('another-input');
+            
+            // Log them
+            console.log(`Standard input: ${standardInput}`);
+            console.log(`Another input: ${anotherInput}`);
+            
+            // Output all inputs as JSON
+            const allInputs = {
+              'standard-input': standardInput,
+              'another-input': anotherInput
+            };
+            
+            core.setOutput('inputs-json', JSON.stringify(allInputs));
+          } catch (error) {
+            core.setFailed(error.message);
+          }
+          EOF
+          
+          # Install node modules for the test action
+          cd .github/actions/test-js-action
+          npm init -y
+          npm install @actions/core
+          
+      # Test running the action with input- prefixed parameters
+      - name: Run with input- prefixed parameters
+        id: test-prefixed
+        uses: ./
+        with:
+          action-ref: ./.github/actions/test-js-action
+          step: test-prefix-handling
+          input-standard-input: "Value passed with input- prefix"
+          input-another-input: "Another prefixed value"
+          
+      # Test that input- prefixed parameters were properly passed to wrapped action
+      - name: Verify inputs were correctly passed
+        run: |
+          echo "Outputs from wrapped action: ${{ steps.test-prefixed.outputs.received-inputs }}"
+          
+          # Check that the prefixed inputs were correctly passed to the action
+          if [[ "${{ steps.test-prefixed.outputs.received-inputs }}" != *"Value passed with input- prefix"* ]]; then
+            echo "ERROR: Prefixed input 'standard-input' was not correctly passed"
+            exit 1
+          fi
+          
+          if [[ "${{ steps.test-prefixed.outputs.received-inputs }}" != *"Another prefixed value"* ]]; then
+            echo "ERROR: Prefixed input 'another-input' was not correctly passed"
+            exit 1
+          fi
+          
+          echo "SUCCESS: All prefixed inputs were correctly passed to the wrapped action"
