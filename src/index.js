@@ -2,6 +2,10 @@
  * Main entry point for the witness-run-action
  */
 const WitnessActionRunner = require('./runners/WitnessActionRunner');
+const { applyCorePatch } = require('./utils/corePatches');
+
+// Apply core module patches to suppress unwanted warnings
+applyCorePatch();
 
 // Expose a main runner function
 async function run() {
