@@ -64,11 +64,11 @@ async function executeCompositeShellStep(step, actionDir, witnessOptions, witnes
   core.info(`Executing composite shell step in directory: ${actionDir}`);
   core.info(`Created temporary script at: ${scriptPath}`);
   
-  // Log the processed script content for debugging
-  core.info(`Script content after processing expressions:`);
-  core.info(`---BEGIN SCRIPT---`);
-  core.info(scriptContent);
-  core.info(`---END SCRIPT---`);
+  // Log the processed script content for debugging (debug level only)
+  core.debug(`Script content after processing expressions:`);
+  core.debug(`---BEGIN SCRIPT---`);
+  core.debug(scriptContent);
+  core.debug(`---END SCRIPT---`);
   
   // For commands that might need executables from the action directory,
   // we need to ensure the action directory is in the PATH
@@ -160,14 +160,14 @@ async function executeCompositeUsesStep(step, parentActionDir, witnessOptions, w
       nestedEnv[inputKey] = processedValue;
       core.info(`Setting nested action input: ${inputName}=${processedValue}`);
       
-      // Just add debug logging about what keys we're setting
-      core.info(`Debug: Added env var '${inputKey}' with value type '${typeof processedValue}'`);
+      // Debug logging about what keys we're setting
+      core.debug(`Added env var '${inputKey}' with value type '${typeof processedValue}'`);
     }
   }
   
-  // Debug: Log information about GITHUB_TOKEN in the environment
-  core.info(`Debug: GITHUB_TOKEN in parent env: ${!!parentEnv.GITHUB_TOKEN}`);
-  core.info(`Debug: GITHUB_TOKEN in nested env: ${!!nestedEnv.GITHUB_TOKEN}`);
+  // Debug: Log if GITHUB_TOKEN exists in the environments (but not the token itself)
+  core.debug(`Token available in parent env: ${!!parentEnv.GITHUB_TOKEN}`);
+  core.debug(`Token available in nested env: ${!!nestedEnv.GITHUB_TOKEN}`);
   
   // Determine action type and resolve location
   let actionDir;

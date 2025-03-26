@@ -11,13 +11,13 @@ function extractDesiredGitOIDs(output) {
   const lines = output.split("\n");
   const desiredSubstring = "Stored in archivista as ";
   const gitOIDs = [];
-  console.log("Looking for GitOID in the output");
+  core.debug("Looking for GitOID in the output");
   for (const line of lines) {
     if (line.indexOf(desiredSubstring) !== -1) {
-      console.log("Checking line: ", line);
+      core.debug(`Checking line containing Archivista reference`);
       const match = line.match(/[0-9a-fA-F]{64}/);
       if (match) {
-        console.log("Found GitOID: ", match[0]);
+        core.debug(`Found GitOID: ${match[0]}`);
         gitOIDs.push(match[0]);
       }
     }
@@ -31,7 +31,7 @@ function extractDesiredGitOIDs(output) {
 function handleGitOIDs(output, archivistaServer, step, attestations) {
   const gitOIDs = extractDesiredGitOIDs(output);
   for (const gitOID of gitOIDs) {
-    console.log("Extracted GitOID:", gitOID);
+    core.info(`Attestation created with ID: ${gitOID}`);
     core.setOutput("git_oid", gitOID);
     
     // Update step summary only if GITHUB_STEP_SUMMARY environment variable is set
@@ -49,11 +49,12 @@ function handleGitOIDs(output, archivistaServer, step, attestations) {
         }
         const tableRow = `| ${step} | ${attestations.join(", ")} | [${gitOID}](${artifactURL}) |\n`;
         fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, tableRow);
+        core.debug(`Added attestation details to GitHub step summary`);
       } catch (error) {
         core.warning(`Failed to update GitHub step summary: ${error.message}`);
       }
     } else {
-      core.info("GITHUB_STEP_SUMMARY environment variable not set, skipping step summary update");
+      core.debug("GITHUB_STEP_SUMMARY environment variable not set, skipping step summary update");
     }
   }
 }
