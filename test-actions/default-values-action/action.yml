@@ -1,0 +1,26 @@
+name: 'Default Values Test Action'
+description: 'Test action for verifying default value propagation'
+inputs:
+  string-input:
+    description: 'A string input with default value'
+    default: 'default string value'
+    required: false
+  boolean-input:
+    description: 'A boolean input with default false'
+    default: false
+    required: false
+  boolean-input-true:
+    description: 'A boolean input with default true'
+    default: true
+    required: false
+  number-input:
+    description: 'A number input with default value'
+    default: 42
+    required: false
+  required-input:
+    description: 'A required input with no default'
+    required: true
+
+runs:
+  using: 'node16'
+  main: 'index.js'
