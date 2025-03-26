@@ -11,6 +11,53 @@ const assembleWitnessArgs = require("../attestation/assembleWitnessArgs");
 const { detectActionType } = require("../actions/actionUtils");
 const { getActionYamlPath } = require("../actions/actionUtils");
 const { applyDefaultsFromActionYml } = require("../utils/defaultsUtils");
+
+/**
+ * Gets the set of witness-specific parameters to filter out
+ * @returns {Set<string>} Set of parameter names to filter out
+ */
+function getWitnessParameters() {
+  const witnessParams = new Set();
+  
+  try {
+    // In a test environment, use a minimal set
+    if (process.env.NODE_ENV === 'test') {
+      const testParams = [
+        'step', 'witness_version', 'action-ref',
+        'archivista-server', 'attestations', 'command', 'version',
+        'enable-sigstore', 'enable-archivista'
+      ];
+      testParams.forEach(param => witnessParams.add(param));
+      return witnessParams;
+    }
+    
+    // In production, read from our own action.yml
+    const ourActionYamlPath = path.resolve(__dirname, '../../action.yml');
+    const ourActionYml = yaml.load(fs.readFileSync(ourActionYamlPath, 'utf8'));
+    
+    if (ourActionYml && ourActionYml.inputs) {
+      // Add all our action's inputs as parameters to filter out
+      Object.keys(ourActionYml.inputs).forEach(inputName => {
+        // Skip the wildcard entry
+        if (inputName !== '*') {
+          witnessParams.add(inputName.toLowerCase());
+        }
+      });
+    }
+    core.debug(`Loaded ${witnessParams.size} Witness parameters to filter from action.yml defaults`);
+  } catch (error) {
+    // Fallback to a minimal set if we can't read our action.yml
+    const fallbackParams = [
+      'step', 'witness_version', 'action-ref',
+      'archivista-server', 'attestations', 'command', 'version',
+      'enable-sigstore', 'enable-archivista'
+    ];
+    fallbackParams.forEach(param => witnessParams.add(param));
+    core.warning(`Failed to load Witness parameters from action.yml: ${error.message}. Using minimal set.`);
+  }
+  
+  return witnessParams;
+}
 const {
   runJsActionWithWitness,
   runCompositeActionWithWitness,
@@ -33,10 +80,7 @@ async function runActionWithWitness(actionDir, witnessOptions, witnessExePath, a
     core.info(`Loaded action: ${actionConfig.name || 'Unnamed Action'} with ${actionConfig.inputs ? Object.keys(actionConfig.inputs).length : 0} inputs`);
 
     // Apply default values from action.yml
-    const witnessParams = new Set([
-      'step', 'witness_version', 'action-ref',
-      'archivista-server', 'attestations', 'command', 'version'
-    ]);
+    const witnessParams = getWitnessParameters();
     
     // Use our centralized utility to apply defaults
     const appliedDefaults = applyDefaultsFromActionYml(actionEnv, actionConfig.inputs, witnessParams);

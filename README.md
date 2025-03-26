@@ -77,10 +77,50 @@ jobs:
 
 When wrapping an action:
 1. Specify the action reference using `action-ref` in the format `owner/repo@ref`
-2. Pass inputs to the wrapped action using the `input-` prefix or directly (recommended for boolean parameters)
-3. You can also pass inputs directly if they don't conflict with witness-run's own inputs
-4. JavaScript-based actions, composite actions, and Docker container actions are supported
-5. Default values from the wrapped action's `action.yml` file are automatically applied if not explicitly provided
+2. Pass inputs to the wrapped action using one of these methods:
+   - Use the `input-` prefix (e.g., `input-my-param: "value"`) for guaranteed passing of parameters
+   - Pass directly if the parameter name doesn't conflict with witness-run's own inputs
+3. JavaScript-based actions, composite actions, and Docker container actions are supported
+4. Default values from the wrapped action's `action.yml` file are automatically applied if not explicitly provided
+
+### Parameter Handling for Wrapped Actions
+
+#### Input Prefix Method (`input-`)
+
+The recommended way to pass inputs to wrapped actions is using the `input-` prefix:
+
+```yaml
+- name: Run Wrapped Action
+  uses: testifysec/witness-run-action@v1
+  with:
+    action-ref: "actions/cache@v3"
+    step: cache-deps
+    # Use input- prefix to pass parameters to the wrapped action
+    input-path: ~/.npm
+    input-key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
+    # Witness-specific parameters
+    enable-sigstore: true
+```
+
+Benefits of using the `input-` prefix:
+- **Guaranteed Parameter Passing**: Parameters with the `input-` prefix are always passed to the wrapped action, even if they have the same name as a witness-run parameter
+- **Automatic Witness Parameter Filtering**: All witness-run parameters are automatically filtered out and not passed to the wrapped action
+- **Boolean Parameter Support**: Boolean parameters maintain their proper data type when passed with the `input-` prefix
+- **No Parameter Conflicts**: Eliminates any potential naming conflicts between your wrapped action's parameters and witness-run parameters
+
+#### Direct Parameter Passing
+
+For parameters that don't conflict with witness-run's parameters, you can pass them directly:
+
+```yaml
+- name: Run Wrapped Action
+  uses: testifysec/witness-run-action@v1
+  with:
+    action-ref: "actions/hello-world-javascript-action@main"
+    step: hello-world
+    # Direct parameter (doesn't conflict with witness-run's parameters)
+    who-to-greet: "Hello from Witness"
+```
 
 ### Security Features for Wrapped Actions
 
@@ -92,7 +132,7 @@ When using `action-ref` to wrap another action, witness-run-action provides enha
 
 This ensures you have cryptographic proof of exactly what code was downloaded before it was executed, enhancing supply chain security.
 
-> **Important Note on Boolean Parameters**: When passing boolean parameters to wrapped actions, it's recommended to use the direct approach (without the `input-` prefix) to ensure proper YAML validation. See [Boolean Parameter Handling](docs/BOOLEAN_PARAM_HANDLING.md) for details.
+> **Note on Boolean Parameters**: Both approaches (with or without the `input-` prefix) work correctly for boolean parameters as of v1.0.0. For more details, see [Boolean Parameter Handling](docs/BOOLEAN_PARAM_HANDLING.md).
 
 ## Composite Actions
 
