@@ -1,0 +1,161 @@
+permissions:
+  id-token: write # This is required for requesting the JWT
+  contents: read  # This is required for actions/checkout
+
+
+
+name: Test Default Values
+
+on:
+  push:
+    branches: 
+      - main
+      - 'fix/**'
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  test-defaults:
+    runs-on: ubuntu-latest
+    name: Test Default Value Propagation
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Build the action
+        run: npm run build
+      
+      # Test the action with no inputs (should use defaults)
+      - name: Test with defaults only
+        id: test-defaults
+        uses: ./
+        with:
+          action-ref: ./test-actions/default-values-action
+          required-input: "provided-value"  # Required input must be provided
+          step: test-defaults
+          enable-archivista: true
+          enable-sigstore: true
+      
+      # Verify outputs from the first test
+      - name: Verify default values were used
+        run: |
+          echo "String Input: ${{ steps.test-defaults.outputs.string-input-received }}"
+          echo "Boolean Input: ${{ steps.test-defaults.outputs.boolean-input-received }}"
+          echo "Boolean Input True: ${{ steps.test-defaults.outputs.boolean-input-true-received }}"
+          echo "Number Input: ${{ steps.test-defaults.outputs.number-input-received }}"
+          echo "Required Input: ${{ steps.test-defaults.outputs.required-input-received }}"
+          
+          # Validate outputs match expected defaults
+          if [[ "${{ steps.test-defaults.outputs.string-input-received }}" != "default string value" ]]; then
+            echo "::error::String input default value was not properly passed"
+            exit 1
+          fi
+          
+          if [[ "${{ steps.test-defaults.outputs.boolean-input-received }}" != "false" ]]; then
+            echo "::error::Boolean input default value was not properly passed"
+            exit 1
+          fi
+          
+          if [[ "${{ steps.test-defaults.outputs.boolean-input-true-received }}" != "true" ]]; then
+            echo "::error::Boolean input true default value was not properly passed"
+            exit 1
+          fi
+          
+          if [[ "${{ steps.test-defaults.outputs.number-input-received }}" != "42" ]]; then
+            echo "::error::Number input default value was not properly passed"
+            exit 1
+          fi
+          
+          if [[ "${{ steps.test-defaults.outputs.required-input-received }}" != "provided-value" ]]; then
+            echo "::error::Required input value was not properly passed"
+            exit 1
+          fi
+          
+          echo "✅ All default values were passed correctly!"
+      
+      # Test with overriding defaults
+      - name: Test with overriding defaults
+        id: test-override
+        uses: ./
+        with:
+          action-ref: ./test-actions/default-values-action
+          step: test-override
+          string-input: "custom string"
+          boolean-input: true
+          boolean-input-true: false
+          number-input: 100
+          required-input: "different value"
+          enable-archivista: true
+          enable-sigstore: true
+
+      # Verify overridden values
+      - name: Verify overridden values
+        run: |
+          echo "String Input: ${{ steps.test-override.outputs.string-input-received }}"
+          echo "Boolean Input: ${{ steps.test-override.outputs.boolean-input-received }}"
+          echo "Boolean Input True: ${{ steps.test-override.outputs.boolean-input-true-received }}"
+          echo "Number Input: ${{ steps.test-override.outputs.number-input-received }}"
+          echo "Required Input: ${{ steps.test-override.outputs.required-input-received }}"
+          
+          # Validate outputs match overridden values
+          if [[ "${{ steps.test-override.outputs.string-input-received }}" != "custom string" ]]; then
+            echo "::error::String input override was not properly passed"
+            exit 1
+          fi
+          
+          if [[ "${{ steps.test-override.outputs.boolean-input-received }}" != "true" ]]; then
+            echo "::error::Boolean input override was not properly passed"
+            exit 1
+          fi
+          
+          if [[ "${{ steps.test-override.outputs.boolean-input-true-received }}" != "false" ]]; then
+            echo "::error::Boolean input true override was not properly passed"
+            exit 1
+          fi
+          
+          if [[ "${{ steps.test-override.outputs.number-input-received }}" != "100" ]]; then
+            echo "::error::Number input override was not properly passed"
+            exit 1
+          fi
+          
+          if [[ "${{ steps.test-override.outputs.required-input-received }}" != "different value" ]]; then
+            echo "::error::Required input override was not properly passed"
+            exit 1
+          fi
+          
+          echo "✅ All overridden values were passed correctly!"
+      
+      # Test boolean normalization (uppercase values should be normalized)
+      - name: Test boolean normalization
+        id: test-boolean-case
+        uses: ./
+        with:
+          action-ref: ./test-actions/default-values-action
+          step: test-boolean-case
+          boolean-input: "TRUE"  # Uppercase should be normalized
+          boolean-input-true: "FALSE"  # Uppercase should be normalized
+          required-input: "required value"
+          enable-archivista: true
+          enable-sigstore: true
+
+      # Verify boolean case normalization
+      - name: Verify boolean case normalization
+        run: |
+          echo "Boolean Input (TRUE): ${{ steps.test-boolean-case.outputs.boolean-input-received }}"
+          echo "Boolean Input True (FALSE): ${{ steps.test-boolean-case.outputs.boolean-input-true-received }}"
+          
+          if [[ "${{ steps.test-boolean-case.outputs.boolean-input-received }}" != "true" ]]; then
+            echo "::error::Boolean input case normalization failed (TRUE should be normalized to true)"
+            exit 1
+          fi
+          
+          if [[ "${{ steps.test-boolean-case.outputs.boolean-input-true-received }}" != "false" ]]; then
+            echo "::error::Boolean input true case normalization failed (FALSE should be normalized to false)"
+            exit 1
+          fi
+          
+          echo "✅ Boolean case normalization worked correctly!"

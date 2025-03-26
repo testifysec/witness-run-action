@@ -1,0 +1,40 @@
+name: Debug Environment
+
+on:
+  workflow_dispatch:
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Debug Environment
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const { execSync } = require('child_process');
+            
+            // Print environment variables
+            console.log('===== ENVIRONMENT VARIABLES =====');
+            console.log(JSON.stringify(process.env, null, 2));
+            
+            // Print working directory
+            console.log('===== WORKING DIRECTORY =====');
+            console.log(`Current directory: ${process.cwd()}`);
+            console.log(`Directory contents: ${fs.readdirSync('.').join(', ')}`);
+            
+            // Print Git status
+            console.log('===== GIT STATUS =====');
+            try {
+              const gitStatus = execSync('git status').toString();
+              console.log(gitStatus);
+              
+              const gitLog = execSync('git log -3 --oneline').toString();
+              console.log('Recent commits:');
+              console.log(gitLog);
+            } catch (error) {
+              console.error(`Git error: ${error.message}`);
+            }
