@@ -84,7 +84,19 @@ async function runDirectCommandWithWitness(command, witnessOptions, witnessExePa
         output += data.toString();
       },
       stderr: (data) => {
-        output += data.toString();
+        const str = data.toString();
+        output += str;
+        
+        // Process Witness stderr output, only warning on actual errors
+        if (str.trim()) {
+          const line = str.trim();
+          if (line.includes('level=error') || line.includes('level=fatal') || line.includes('level=warning')) {
+            core.warning(`Witness stderr: ${line}`);
+          } else {
+            // Just info or debug messages, use core.debug
+            core.debug(`Witness stderr: ${line}`);
+          }
+        }
       },
     },
   });

@@ -196,8 +196,16 @@ async function runJsActionWithWitness(actionDir, actionConfig, witnessOptions, w
         const str = data.toString();
         output += str;
         
-        // Always log stderr for better debugging
-        core.warning(`STDERR: ${str.trim()}`);
+        // Process Witness stderr output, only warning on actual errors
+        if (str.trim()) {
+          const line = str.trim();
+          if (line.includes('level=error') || line.includes('level=fatal') || line.includes('level=warning')) {
+            core.warning(`Witness stderr: ${line}`);
+          } else {
+            // Just info or debug messages, use core.debug
+            core.debug(`Witness stderr: ${line}`);
+          }
+        }
       },
     },
   });
@@ -596,9 +604,15 @@ async function runDockerActionWithWitness(actionDir, actionConfig, witnessOption
           const str = data.toString();
           output += str;
           
-          // Always log stderr to help debug issues
+          // Process Witness stderr output, only warning on actual errors
           if (str.trim()) {
-            core.warning(`Witness stderr: ${str.trim()}`);
+            const line = str.trim();
+            if (line.includes('level=error') || line.includes('level=fatal') || line.includes('level=warning')) {
+              core.warning(`Witness stderr: ${line}`);
+            } else {
+              // Just info or debug messages, use core.debug
+              core.debug(`Witness stderr: ${line}`);
+            }
           }
         },
       },
