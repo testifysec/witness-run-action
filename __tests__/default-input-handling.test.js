@@ -96,7 +96,7 @@ jest.mock('../src/utils/defaultsUtils', () => {
       // Apply defaults to environment
       for (const [name, config] of Object.entries(inputs)) {
         if (config.default !== undefined) {
-          const key = `INPUT_${name.toUpperCase().replace(/-/g, '-')}`;
+          const key = `INPUT_${name.toUpperCase()}`;
           env[key] = String(config.default);
         }
       }
