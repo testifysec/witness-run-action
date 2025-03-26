@@ -29,16 +29,8 @@ async function runActionWithWitness(actionDir, witnessOptions, witnessExePath, a
   if (!actionConfig) {
     const actionYmlPath = getActionYamlPath(actionDir);
     actionConfig = yaml.load(fs.readFileSync(actionYmlPath, 'utf8'));
-    //print action config
-    core.info(`Action config: ${JSON.stringify(actionConfig, null, 2)}`);
-    
-    // Dump all current environment variables starting with INPUT_ for debugging
-    core.info(`Current environment variables (INPUT_ only):`);
-    for (const [key, value] of Object.entries(actionEnv)) {
-      if (key.startsWith('INPUT_')) {
-        core.info(`  ${key}=${value}`);
-      }
-    }
+    // Log basic action info without exposing configuration details
+    core.info(`Loaded action: ${actionConfig.name || 'Unnamed Action'} with ${actionConfig.inputs ? Object.keys(actionConfig.inputs).length : 0} inputs`);
 
     // Apply default values from action.yml
     const witnessParams = new Set([
