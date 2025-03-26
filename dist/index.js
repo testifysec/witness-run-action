@@ -32998,6 +32998,67 @@ async function downloadAndSetupAction(actionRef) {
   core.info(`Successfully set up action at: ${tempDir}`);
   return tempDir;
 }
+
+/**
+ * Downloads a GitHub Action repository and creates an attestation of the download.
+ * This creates a separate attestation for the download process to enhance provenance.
+ */
+async function downloadActionWithWitness(actionRef, witnessExePath, witnessOptions) {
+  // Reuse the existing download function to avoid code duplication
+  const tempDir = await downloadAndSetupAction(actionRef);
+  core.info(`Downloaded action at: ${tempDir}, preparing attestation`);
+  
+  // Now that we have the repository cloned, run witness attestation on it
+  const assembleWitnessArgs = __nccwpck_require__(5390);
+  
+  // Only use git and github attestors for download attestation
+  // Do NOT use user-provided attestors for security reasons
+  const attestations = [
+    'git',    // Git metadata
+    'github'  // GitHub-specific context if available
+  ]
+  
+  // Use provided download options, but ensure we have the necessary settings
+  const downloadOptions = {
+    ...witnessOptions,
+    attestations,
+    // Set working directory to the cloned repo
+    workingdir: tempDir
+  };
+  
+  // If no outfile specified, create a default one
+  if (!downloadOptions.outfile) {
+    downloadOptions.outfile = path.join(os.tmpdir(), `${downloadOptions.step}-attestation.json`);
+  }
+  
+  // Run a simple command with witness to capture attestation of the cloned repo
+  // Using 'git rev-parse HEAD' to get current commit hash and trigger git attestor
+  const witnessArgs = assembleWitnessArgs(downloadOptions, ['git', 'rev-parse', 'HEAD']);
+  
+  let output = "";
+  
+  // Execute git rev-parse with witness to capture attestation
+  core.info(`Running witness to attest cloned repository: ${witnessExePath} ${witnessArgs.join(" ")}`);
+  await exec.exec(witnessExePath, witnessArgs, {
+    cwd: tempDir,
+    env: process.env,
+    listeners: {
+      stdout: (data) => {
+        output += data.toString();
+      },
+      stderr: (data) => {
+        output += data.toString();
+      }
+    }
+  });
+  
+  core.info(`Successfully set up action at: ${tempDir} with attestation at ${downloadOptions.outfile}`);
+  return {
+    actionDir: tempDir,
+    attestationOutput: output,
+    attestationFile: downloadOptions.outfile
+  };
+}
   
 
 // Import the function from actionUtils to avoid duplication
@@ -33016,6 +33077,7 @@ function cleanUpDirectory(dir) {
 
 module.exports = {
   downloadAndSetupAction,
+  downloadActionWithWitness,
   getActionYamlPath,
   cleanUpDirectory
 };
@@ -33439,67 +33501,186 @@ module.exports = {
  */
 function assembleWitnessArgs(witnessOptions, extraArgs = []) {
   const cmd = ["run"];
+  const core = __nccwpck_require__(7484);
+  
+  // Destructure all options from witnessOptions
   const {
-    enableSigstore,
-    fulcio,
-    fulcioOidcClientId,
-    fulcioOidcIssuer,
-    timestampServers,
+    // Basic settings
+    step,
+    outfile,
+    trace,
+    workingdir,
+    
+    // Attestations
     attestations,
+    
+    // Archivista settings
+    enableArchivista,
+    archivistaServer,
+    
+    // Attestor settings
     exportLink,
     exportSBOM,
     exportSLSA,
     mavenPOM,
-    certificate,
-    enableArchivista,
-    archivistaServer,
-    fulcioToken,
-    intermediates,
-    key,
     productExcludeGlob,
     productIncludeGlob,
+    
+    // Hash settings
+    hashes,
+    
+    // Environment variable settings
+    envAddSensitiveKey,
+    envDisableDefaultSensitiveVars,
+    envExcludeSensitiveKey,
+    envFilterSensitiveVars,
+    
+    // Dirhash settings
+    dirhashGlob,
+    
+    // Signer settings - Sigstore
+    enableSigstore,
+    fulcio,
+    fulcioOidcClientId,
+    fulcioOidcIssuer,
+    fulcioOidcRedirectUrl,
+    fulcioToken,
+    fulcioTokenPath,
+    
+    // Signer settings - File
+    certificate,
+    key,
+    intermediates,
+    
+    // Signer settings - KMS (AWS)
+    kmsAwsConfigFile,
+    kmsAwsCredentialsFile,
+    kmsAwsInsecureSkipVerify,
+    kmsAwsProfile,
+    kmsAwsRemoteVerify,
+    
+    // Signer settings - KMS (GCP)
+    kmsGcpCredentialsFile,
+    
+    // Signer settings - KMS (General)
+    kmsHashType,
+    kmsKeyVersion,
+    kmsRef,
+    
+    // Signer settings - SPIFFE
     spiffeSocket,
-    step,
-    trace,
-    outfile
+    
+    // Signer settings - Vault
+    vaultAltnames,
+    vaultCommonname,
+    vaultNamespace,
+    vaultPkiSecretsEnginePath,
+    vaultRole,
+    vaultToken,
+    vaultTtl,
+    vaultUrl,
+    
+    // Timestamp servers
+    timestampServers,
+    
+    // Additional custom arguments
+    witnessArgs
   } = witnessOptions;
 
+  // Process Sigstore settings
   if (enableSigstore) {
     const sigstoreFulcio = fulcio || "https://fulcio.sigstore.dev";
     const sigstoreClientId = fulcioOidcClientId || "sigstore";
     const sigstoreOidcIssuer = fulcioOidcIssuer || "https://oauth2.sigstore.dev/auth";
     let sigstoreTimestampServers = "https://freetsa.org/tsr";
+    
     if (timestampServers) {
       sigstoreTimestampServers += " " + timestampServers;
     }
+    
     cmd.push(`--signer-fulcio-url=${sigstoreFulcio}`);
     cmd.push(`--signer-fulcio-oidc-client-id=${sigstoreClientId}`);
     cmd.push(`--signer-fulcio-oidc-issuer=${sigstoreOidcIssuer}`);
     
-    // Remove CI-specific OIDC flags that might not be supported in this version
-    // Just use the standard Sigstore flags
+    // Add fulcio OIDC redirect URL if provided
+    if (fulcioOidcRedirectUrl) {
+      cmd.push(`--signer-fulcio-oidc-redirect-url=${fulcioOidcRedirectUrl}`);
+    }
     
+    // Add timestamp servers
     sigstoreTimestampServers.split(" ").forEach((ts) => {
       ts = ts.trim();
       if (ts.length > 0) {
         cmd.push(`--timestamp-servers=${ts}`);
       }
     });
-  } else {
-    // For non-sigstore runs, don't add any special flags
-    // witness will run without signers by default
+  }
+
+  // Process fulcio token options regardless of sigstore being enabled
+  if (fulcioToken) cmd.push(`--signer-fulcio-token=${fulcioToken}`);
+  if (fulcioTokenPath) cmd.push(`--signer-fulcio-token-path=${fulcioTokenPath}`);
     
-    // Add timestamp servers if provided
-    if (timestampServers) {
-      timestampServers.split(" ").forEach((ts) => {
-        ts = ts.trim();
-        if (ts.length > 0) {
-          cmd.push(`--timestamp-servers=${ts}`);
-        }
-      });
-    }
+  // For non-sigstore runs, just add timestamp servers if provided (if sigstore is enabled, we already added them)
+  if (!enableSigstore && timestampServers && timestampServers.length > 0) {
+    timestampServers.split(" ").forEach((ts) => {
+      ts = ts.trim();
+      if (ts.length > 0) {
+        cmd.push(`--timestamp-servers=${ts}`);
+      }
+    });
   }
   
+  // Process file signer options
+  if (certificate) cmd.push(`--signer-file-cert-path=${certificate}`);
+  if (key) cmd.push(`--signer-file-key-path=${key}`);
+  
+  if (intermediates && intermediates.length) {
+    intermediates.forEach((intermediate) => {
+      intermediate = intermediate.trim();
+      if (intermediate.length > 0) {
+        cmd.push(`--signer-file-intermediate-paths=${intermediate}`);
+      }
+    });
+  }
+  
+  // Process KMS AWS options
+  if (kmsAwsConfigFile) cmd.push(`--signer-kms-aws-config-file=${kmsAwsConfigFile}`);
+  if (kmsAwsCredentialsFile) cmd.push(`--signer-kms-aws-credentials-file=${kmsAwsCredentialsFile}`);
+  if (kmsAwsInsecureSkipVerify) cmd.push(`--signer-kms-aws-insecure-skip-verify`);
+  if (kmsAwsProfile) cmd.push(`--signer-kms-aws-profile=${kmsAwsProfile}`);
+  
+  // For kmsAwsRemoteVerify, we only want to add the flag if it's false, since true is the default
+  if (kmsAwsRemoteVerify === false) cmd.push(`--signer-kms-aws-remote-verify=false`);
+  
+  // Process KMS GCP options
+  if (kmsGcpCredentialsFile) cmd.push(`--signer-kms-gcp-credentials-file=${kmsGcpCredentialsFile}`);
+  
+  // Process KMS General options
+  if (kmsHashType) cmd.push(`--signer-kms-hashType=${kmsHashType}`); // Using the same case as Witness CLI
+  if (kmsKeyVersion) cmd.push(`--signer-kms-keyVersion=${kmsKeyVersion}`);
+  if (kmsRef) cmd.push(`--signer-kms-ref=${kmsRef}`);
+  
+  // Process SPIFFE options
+  if (spiffeSocket) cmd.push(`--signer-spiffe-socket-path=${spiffeSocket}`);
+  
+  // Process Vault options
+  if (vaultAltnames && vaultAltnames.length) {
+    vaultAltnames.forEach(name => {
+      if (name.trim().length > 0) {
+        cmd.push(`--signer-vault-altnames=${name}`);
+      }
+    });
+  }
+  
+  if (vaultCommonname) cmd.push(`--signer-vault-commonname=${vaultCommonname}`);
+  if (vaultNamespace) cmd.push(`--signer-vault-namespace=${vaultNamespace}`);
+  if (vaultPkiSecretsEnginePath) cmd.push(`--signer-vault-pki-secrets-engine-path=${vaultPkiSecretsEnginePath}`);
+  if (vaultRole) cmd.push(`--signer-vault-role=${vaultRole}`);
+  if (vaultToken) cmd.push(`--signer-vault-token=${vaultToken}`);
+  if (vaultTtl) cmd.push(`--signer-vault-ttl=${vaultTtl}`);
+  if (vaultUrl) cmd.push(`--signer-vault-url=${vaultUrl}`);
+  
+  // Process attestation options
   if (attestations && attestations.length) {
     attestations.forEach((attestation) => {
       attestation = attestation.trim();
@@ -33509,14 +33690,16 @@ function assembleWitnessArgs(witnessOptions, extraArgs = []) {
     });
   }
   
+  // Process attestor options
   if (exportLink) cmd.push(`--attestor-link-export`);
   if (exportSBOM) cmd.push(`--attestor-sbom-export`);
   if (exportSLSA) cmd.push(`--attestor-slsa-export`);
   if (mavenPOM) cmd.push(`--attestor-maven-pom-path=${mavenPOM}`);
+  if (productExcludeGlob) cmd.push(`--attestor-product-exclude-glob=${productExcludeGlob}`);
+  if (productIncludeGlob) cmd.push(`--attestor-product-include-glob=${productIncludeGlob}`);
   
-  if (certificate) cmd.push(`--certificate=${certificate}`);
+  // Process Archivista settings
   // Log the actual enable-archivista value being passed to witness
-  const core = __nccwpck_require__(7484);
   core.info(`Passing --enable-archivista=${enableArchivista} (${typeof enableArchivista})`);
   
   // Handle boolean values by converting them to strings 'true' or 'false'
@@ -33525,24 +33708,64 @@ function assembleWitnessArgs(witnessOptions, extraArgs = []) {
     cmd.push(`--enable-archivista=${stringValue}`);
   }
   if (archivistaServer) cmd.push(`--archivista-server=${archivistaServer}`);
-  if (fulcioToken) cmd.push(`--signer-fulcio-token=${fulcioToken}`);
   
-  if (intermediates && intermediates.length) {
-    intermediates.forEach((intermediate) => {
-      intermediate = intermediate.trim();
-      if (intermediate.length > 0) {
-        cmd.push(`-i=${intermediate}`);
+  // Process environment variable settings
+  if (envAddSensitiveKey && envAddSensitiveKey.length) {
+    envAddSensitiveKey.forEach(key => {
+      if (key.trim().length > 0) {
+        cmd.push(`--env-add-sensitive-key=${key}`);
       }
     });
   }
   
-  if (key) cmd.push(`--key=${key}`);
-  if (productExcludeGlob) cmd.push(`--attestor-product-exclude-glob=${productExcludeGlob}`);
-  if (productIncludeGlob) cmd.push(`--attestor-product-include-glob=${productIncludeGlob}`);
-  if (spiffeSocket) cmd.push(`--spiffe-socket=${spiffeSocket}`);
+  if (envDisableDefaultSensitiveVars) {
+    cmd.push('--env-disable-default-sensitive-vars');
+  }
+  
+  if (envExcludeSensitiveKey && envExcludeSensitiveKey.length) {
+    envExcludeSensitiveKey.forEach(key => {
+      if (key.trim().length > 0) {
+        cmd.push(`--env-exclude-sensitive-key=${key}`);
+      }
+    });
+  }
+  
+  if (envFilterSensitiveVars) {
+    cmd.push('--env-filter-sensitive-vars');
+  }
+  
+  // Process hash settings
+  if (hashes && hashes.length) {
+    hashes.forEach(hash => {
+      if (hash.trim().length > 0) {
+        cmd.push(`--hashes=${hash}`);
+      }
+    });
+  }
+  
+  // Process dirhash settings
+  if (dirhashGlob && dirhashGlob.length) {
+    dirhashGlob.forEach(glob => {
+      if (glob.trim().length > 0) {
+        cmd.push(`--dirhash-glob=${glob}`);
+      }
+    });
+  }
+  
+  // Process basic settings
   if (step) cmd.push(`-s=${step}`);
   if (trace) cmd.push(`--trace=${trace}`);
-  if (outfile) cmd.push(`--outfile=${outfile}`);
+  if (outfile) cmd.push(`-o=${outfile}`);
+  if (workingdir) cmd.push(`-d=${workingdir}`);
+  
+  // Process additional witness args if provided
+  if (witnessArgs && witnessArgs.length > 0) {
+    witnessArgs.forEach(arg => {
+      if (arg.trim().length > 0) {
+        cmd.push(arg);
+      }
+    });
+  }
   
   // Clean up extraArgs to ensure they're all strings
   const cleanedExtraArgs = extraArgs.map(arg => {
@@ -33606,28 +33829,88 @@ function getWitnessOptions() {
   };
   
   return {
+    // Basic settings
     step,
-    archivistaServer: core.getInput("archivista-server"),
-    attestations: splitInputToArray("attestations"),
-    certificate: core.getInput("certificate"),
-    enableArchivista: getBooleanInput("enable-archivista"),
-    fulcio: core.getInput("fulcio"),
-    fulcioOidcClientId: core.getInput("fulcio-oidc-client-id"),
-    fulcioOidcIssuer: core.getInput("fulcio-oidc-issuer"),
-    fulcioToken: core.getInput("fulcio-token"),
-    intermediates: splitInputToArray("intermediates"),
-    key: core.getInput("key"),
     outfile,
-    productExcludeGlob: core.getInput("product-exclude-glob"),
-    productIncludeGlob: core.getInput("product-include-glob"),
-    spiffeSocket: core.getInput("spiffe-socket"),
-    timestampServers: core.getInput("timestamp-servers"),
     trace: core.getInput("witness_trace"),
-    enableSigstore: getBooleanInput("enable-sigstore"),
+    workingdir: core.getInput("workingdir"),
+    
+    // Archivista settings
+    enableArchivista: getBooleanInput("enable-archivista"),
+    archivistaServer: core.getInput("archivista-server"),
+    
+    // Attestation settings
+    attestations: splitInputToArray("attestations"),
+    
+    // Attestor settings
     exportLink: getBooleanInput("attestor-link-export"),
     exportSBOM: getBooleanInput("attestor-sbom-export"),
     exportSLSA: getBooleanInput("attestor-slsa-export"),
     mavenPOM: core.getInput("attestor-maven-pom-path"),
+    productExcludeGlob: core.getInput("product-exclude-glob"),
+    productIncludeGlob: core.getInput("product-include-glob"),
+    
+    // Sigstore settings
+    enableSigstore: getBooleanInput("enable-sigstore"),
+    
+    // Signer file settings
+    certificate: core.getInput("certificate"),
+    key: core.getInput("key"),
+    intermediates: splitInputToArray("intermediates"),
+    
+    // Fulcio settings
+    fulcio: core.getInput("fulcio"),
+    fulcioOidcClientId: core.getInput("fulcio-oidc-client-id"),
+    fulcioOidcIssuer: core.getInput("fulcio-oidc-issuer"),
+    fulcioOidcRedirectUrl: core.getInput("fulcio-oidc-redirect-url"),
+    fulcioToken: core.getInput("fulcio-token"),
+    fulcioTokenPath: core.getInput("fulcio-token-path"),
+    
+    // KMS settings - AWS
+    kmsAwsConfigFile: core.getInput("kms-aws-config-file"),
+    kmsAwsCredentialsFile: core.getInput("kms-aws-credentials-file"),
+    kmsAwsInsecureSkipVerify: getBooleanInput("kms-aws-insecure-skip-verify"),
+    kmsAwsProfile: core.getInput("kms-aws-profile"),
+    kmsAwsRemoteVerify: getBooleanInput("kms-aws-remote-verify", true),
+    
+    // KMS settings - GCP
+    kmsGcpCredentialsFile: core.getInput("kms-gcp-credentials-file"),
+    
+    // KMS settings - General
+    kmsHashType: core.getInput("kms-hash-type"),
+    kmsKeyVersion: core.getInput("kms-key-version"),
+    kmsRef: core.getInput("kms-ref"),
+    
+    // SPIFFE settings
+    spiffeSocket: core.getInput("spiffe-socket"),
+    
+    // Vault settings
+    vaultAltnames: splitInputToArray("vault-altnames"),
+    vaultCommonname: core.getInput("vault-commonname"),
+    vaultNamespace: core.getInput("vault-namespace"),
+    vaultPkiSecretsEnginePath: core.getInput("vault-pki-secrets-engine-path"),
+    vaultRole: core.getInput("vault-role"),
+    vaultToken: core.getInput("vault-token"),
+    vaultTtl: core.getInput("vault-ttl"),
+    vaultUrl: core.getInput("vault-url"),
+    
+    // Timestamp settings
+    timestampServers: core.getInput("timestamp-servers"),
+    
+    // Hash settings
+    hashes: splitInputToArray("hashes"),
+    
+    // Environment variable settings
+    envAddSensitiveKey: splitInputToArray("env-add-sensitive-key"),
+    envDisableDefaultSensitiveVars: getBooleanInput("env-disable-default-sensitive-vars"),
+    envExcludeSensitiveKey: splitInputToArray("env-exclude-sensitive-key"),
+    envFilterSensitiveVars: getBooleanInput("env-filter-sensitive-vars"),
+    
+    // Dirhash settings
+    dirhashGlob: splitInputToArray("dirhash-glob"),
+    
+    // Additional custom arguments
+    witnessArgs: splitInputToArray("witness-args"),
   };
 }
 
@@ -33858,7 +34141,7 @@ const { downloadAndSetupWitness } = __nccwpck_require__(4581);
 const getWitnessOptions = __nccwpck_require__(883);
 const { runActionWithWitness, runDirectCommandWithWitness } = __nccwpck_require__(1229);
 const { handleGitOIDs } = __nccwpck_require__(4669);
-const { downloadAndSetupAction, cleanUpDirectory } = __nccwpck_require__(9126);
+const { downloadAndSetupAction, downloadActionWithWitness, cleanUpDirectory } = __nccwpck_require__(9126);
 
 /**
  * Main action runner class
@@ -33910,8 +34193,14 @@ class WitnessActionRunner {
       const command = core.getInput("command");
       const actionRef = core.getInput("action-ref");
       
-      if (!command && !actionRef || (command && actionRef)) {
-        core.setFailed("Invalid input: Either 'command' or 'action-ref' input is required, but not both");
+      if (!command && !actionRef) {
+        core.setFailed("Invalid input: Either 'command' or 'action-ref' input is required");
+        process.exit(1);
+      }
+      
+      // Allow both command and action-ref when using Docker image reference
+      if (command && actionRef && !actionRef.startsWith('docker://')) {
+        core.setFailed("Invalid input: Either 'command' or 'action-ref' input is required, but not both unless using Docker image reference");
         process.exit(1);
       }
       
@@ -33984,10 +34273,54 @@ class WitnessActionRunner {
     if (actionRef.startsWith('./') || actionRef.startsWith('../')) {
       this.actionDir = this.resolveLocalActionPath(actionRef);
     } else {
-      // Download remote action
-      core.info(`Downloading remote action: ${actionRef}`);
-      this.actionDir = await downloadAndSetupAction(actionRef);
-      core.info(`Downloaded action to: ${this.actionDir}`);
+      // Download remote action with witness attestation
+      core.info(`Downloading remote action with witness attestation: ${actionRef}`);
+      
+      // Create download-specific options
+      const downloadStepName = `${this.witnessOptions.step}-download`;
+      
+      // Use custom output path if specified by user, otherwise use default
+      let downloadOutfile = this.witnessOptions.outfile;
+      if (downloadOutfile) {
+        // If user provided an outfile, create a download-specific variant
+        const outfileExt = path.extname(downloadOutfile);
+        const outfileBase = path.basename(downloadOutfile, outfileExt);
+        const outfileDir = path.dirname(downloadOutfile);
+        downloadOutfile = path.join(outfileDir, `${outfileBase}-download${outfileExt}`);
+      }
+      
+      // Clone options to avoid modifying the original
+      const downloadOptions = {
+        ...this.witnessOptions,
+        step: downloadStepName,
+        outfile: downloadOutfile
+      };
+      
+      const downloadResult = await downloadActionWithWitness(
+        actionRef,
+        this.witnessExePath,
+        downloadOptions
+      );
+      
+      this.actionDir = downloadResult.actionDir;
+      
+      // Process download attestation output for GitOIDs
+      if (downloadResult.attestationOutput) {
+        handleGitOIDs(
+          downloadResult.attestationOutput,
+          downloadOptions.archivistaServer,
+          downloadStepName,
+          ['git', 'github'] // Only git and github attestors are used for download
+        );
+        
+        // Set output for download attestation file
+        if (downloadResult.attestationFile) {
+          core.setOutput("download_attestation_file", downloadResult.attestationFile);
+          core.info(`Download attestation created at: ${downloadResult.attestationFile}`);
+        }
+      }
+      
+      core.info(`Downloaded action with attestation to: ${this.actionDir}`);
     }
     
     // Prepare environment for the wrapped action

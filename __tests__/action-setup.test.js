@@ -46,8 +46,12 @@ String.prototype.startsWith = function(str) {
   return originalStartsWith.call(this, str);
 };
 
+// Mock assembleWitnessArgs
+const mockAssembleWitnessArgs = jest.fn();
+jest.mock('../src/attestation/assembleWitnessArgs', () => mockAssembleWitnessArgs);
+
 // Now import the module to test
-const { downloadAndSetupAction, getActionYamlPath, cleanUpDirectory } = require('../src/actions/actionSetup');
+const { downloadAndSetupAction, downloadActionWithWitness, getActionYamlPath, cleanUpDirectory } = require('../src/actions/actionSetup');
 
 describe('Action Setup Tests', () => {
   beforeEach(() => {
@@ -271,6 +275,169 @@ describe('Action Setup Tests', () => {
       // Verify
       expect(mockCore.warning).toHaveBeenCalledWith(
         `Failed to clean up action directory: ${error.message}`
+      );
+    });
+  });
+
+  describe('downloadActionWithWitness', () => {
+    test('should download action and create attestation', async () => {
+      // Setup
+      const tempDirPath = '/mock-tmp-dir/action-12345';
+      const actionRef = 'actions/checkout@v3';
+      const witnessExePath = '/path/to/witness';
+      const witnessOptions = {
+        step: 'test-step',
+        attestations: ['product']
+      };
+      
+      // Mock mkdtempSync
+      mockFs.mkdtempSync.mockReturnValue(tempDirPath);
+      
+      // Mock exec to simulate successful git commands
+      mockExec.exec.mockResolvedValueOnce(0) // git clone success
+               .mockResolvedValueOnce(0); // witness attestation success
+      
+      // Mock assembleWitnessArgs
+      const mockWitnessArgs = ['run', '-s=test-step-download', '-a=git', '-a=github', '-a=product', '--', 'git', 'rev-parse', 'HEAD'];
+      mockAssembleWitnessArgs.mockReturnValue(mockWitnessArgs);
+
+      // Call the function
+      const result = await downloadActionWithWitness(actionRef, witnessExePath, witnessOptions);
+
+      // Verify the result structure
+      expect(result).toHaveProperty('actionDir', tempDirPath);
+      expect(result).toHaveProperty('attestationOutput');
+      expect(result).toHaveProperty('attestationFile');
+      
+      // Verify the correct git commands were executed
+      expect(mockExec.exec).toHaveBeenNthCalledWith(
+        1,
+        'git', 
+        [
+          'clone',
+          '--depth=1',
+          '--branch', 'v3',
+          'https://github.com/actions/checkout.git',
+          tempDirPath
+        ]
+      );
+      
+      // Verify witness was called correctly
+      expect(mockExec.exec).toHaveBeenNthCalledWith(
+        2,
+        witnessExePath,
+        mockWitnessArgs,
+        expect.objectContaining({
+          cwd: tempDirPath,
+          env: process.env
+        })
+      );
+      
+      // Verify witness args were constructed with the right options
+      expect(mockAssembleWitnessArgs).toHaveBeenCalledWith(
+        expect.objectContaining({
+          attestations: ['git', 'github'],
+          workingdir: tempDirPath
+        }),
+        ['git', 'rev-parse', 'HEAD']
+      );
+    });
+
+    test('should handle fallback to regular clone and checkout', async () => {
+      // Setup
+      const tempDirPath = '/mock-tmp-dir/action-12345';
+      const actionRef = 'actions/checkout@v3';
+      const witnessExePath = '/path/to/witness';
+      const witnessOptions = {
+        step: 'test-step',
+        attestations: []
+      };
+      
+      // Mock mkdtempSync
+      mockFs.mkdtempSync.mockReturnValue(tempDirPath);
+      
+      // Mock exec to simulate branch clone failure then success with regular approach
+      mockExec.exec.mockRejectedValueOnce(new Error('Branch not found')) // First attempt fails
+               .mockResolvedValueOnce(0) // Regular clone succeeds
+               .mockResolvedValueOnce(0) // Checkout succeeds
+               .mockResolvedValueOnce(0); // witness attestation success
+      
+      // Mock assembleWitnessArgs
+      const mockWitnessArgs = ['run', '-s=test-step-download', '-a=git', '-a=github', '--', 'git', 'rev-parse', 'HEAD'];
+      mockAssembleWitnessArgs.mockReturnValue(mockWitnessArgs);
+
+      // Call the function
+      const result = await downloadActionWithWitness(actionRef, witnessExePath, witnessOptions);
+
+      // Verify the result structure
+      expect(result).toHaveProperty('actionDir', tempDirPath);
+      
+      // Verify both clone approaches were tried
+      expect(mockExec.exec).toHaveBeenNthCalledWith(
+        1,
+        'git', 
+        [
+          'clone',
+          '--depth=1',
+          '--branch', 'v3',
+          'https://github.com/actions/checkout.git',
+          tempDirPath
+        ]
+      );
+      expect(mockExec.exec).toHaveBeenNthCalledWith(
+        2,
+        'git', 
+        [
+          'clone',
+          'https://github.com/actions/checkout.git',
+          tempDirPath
+        ]
+      );
+      expect(mockExec.exec).toHaveBeenNthCalledWith(
+        3,
+        'git', 
+        ['checkout', 'v3'], 
+        { cwd: tempDirPath }
+      );
+      
+      // Verify witness was called correctly
+      expect(mockExec.exec).toHaveBeenNthCalledWith(
+        4,
+        witnessExePath,
+        mockWitnessArgs,
+        expect.objectContaining({
+          cwd: tempDirPath
+        })
+      );
+    });
+
+    test('should throw an error for invalid action reference', async () => {
+      const witnessExePath = '/path/to/witness';
+      const witnessOptions = { step: 'test-step' };
+      
+      // Call the function with an invalid reference
+      await expect(downloadActionWithWitness('invalid-ref', witnessExePath, witnessOptions)).rejects.toThrow(
+        'Invalid action reference: invalid-ref. Format should be owner/repo@ref'
+      );
+    });
+
+    test('should handle git clone complete failure', async () => {
+      // Setup
+      const tempDirPath = '/mock-tmp-dir/action-12345';
+      const actionRef = 'actions/checkout@v3';
+      const witnessExePath = '/path/to/witness';
+      const witnessOptions = { step: 'test-step' };
+      
+      // Mock mkdtempSync
+      mockFs.mkdtempSync.mockReturnValue(tempDirPath);
+      
+      // Mock exec to simulate git clone failure in both approaches
+      mockExec.exec.mockRejectedValueOnce(new Error('Branch clone failed')) // First attempt fails
+               .mockRejectedValueOnce(new Error('Git clone failed')); // Second attempt fails
+
+      // Call the function and expect an error
+      await expect(downloadActionWithWitness(actionRef, witnessExePath, witnessOptions)).rejects.toThrow(
+        'Git clone failed'
       );
     });
   });

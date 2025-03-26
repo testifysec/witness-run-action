@@ -82,6 +82,16 @@ When wrapping an action:
 4. JavaScript-based actions, composite actions, and Docker container actions are supported
 5. Default values from the wrapped action's `action.yml` file are automatically applied if not explicitly provided
 
+### Security Features for Wrapped Actions
+
+When using `action-ref` to wrap another action, witness-run-action provides enhanced security through:
+
+1. **Download Attestation**: Creates a separate attestation for the action download process using git and GitHub attestors
+2. **Full Provenance Chain**: Links the download attestation with the execution attestation to establish a complete chain of custody
+3. **Independent Verification**: Allows verification of both the downloaded code and its execution
+
+This ensures you have cryptographic proof of exactly what code was downloaded before it was executed, enhancing supply chain security.
+
 > **Important Note on Boolean Parameters**: When passing boolean parameters to wrapped actions, it's recommended to use the direct approach (without the `input-` prefix) to ensure proper YAML validation. See [Boolean Parameter Handling](docs/BOOLEAN_PARAM_HANDLING.md) for details.
 
 ## Composite Actions

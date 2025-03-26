@@ -29,7 +29,8 @@ jest.mock('../src/attestation/getWitnessOptions', () =>
   jest.fn().mockReturnValue({
     step: 'test-step',
     archivistaServer: 'https://example.com',
-    attestations: ['git', 'environment']
+    attestations: ['git', 'environment'],
+    outfile: '/tmp/test-step-attestation.json'
   })
 );
 jest.mock('../src/attestation/gitOidUtils', () => ({
@@ -42,6 +43,13 @@ jest.mock('../src/runners/commandRunners', () => ({
 }));
 jest.mock('../src/actions/actionSetup', () => ({
   downloadAndSetupAction: jest.fn().mockResolvedValue('/tmp/action-dir'),
+  downloadActionWithWitness: jest.fn().mockImplementation((actionRef, witnessExePath, options) => {
+    return Promise.resolve({
+      actionDir: '/tmp/action-dir',
+      attestationOutput: 'Mock attestation output',
+      attestationFile: options.outfile || '/tmp/attestation.json'
+    });
+  }),
   cleanUpDirectory: jest.fn()
 }));
 
@@ -51,7 +59,7 @@ const { downloadAndSetupWitness } = require('../src/core/witnessDownloader');
 const getWitnessOptions = require('../src/attestation/getWitnessOptions');
 const { handleGitOIDs } = require('../src/attestation/gitOidUtils');
 const { runActionWithWitness, runDirectCommandWithWitness } = require('../src/runners/commandRunners');
-const { downloadAndSetupAction, cleanUpDirectory } = require('../src/actions/actionSetup');
+const { downloadAndSetupAction, downloadActionWithWitness, cleanUpDirectory } = require('../src/actions/actionSetup');
 
 describe('WitnessActionRunner', () => {
   let runner;
@@ -107,7 +115,8 @@ describe('WitnessActionRunner', () => {
       expect(runner.witnessOptions).toEqual({
         step: 'test-step',
         archivistaServer: 'https://example.com',
-        attestations: ['git', 'environment']
+        attestations: ['git', 'environment'],
+        outfile: '/tmp/test-step-attestation.json'
       });
       
       // Verify current directory was changed
@@ -288,8 +297,14 @@ describe('WitnessActionRunner', () => {
       // Call executeAction
       const result = await runner.executeAction(actionRef);
       
-      // Verify action was downloaded
-      expect(downloadAndSetupAction).toHaveBeenCalledWith(actionRef);
+      // Verify action was downloaded with witness
+      expect(downloadActionWithWitness).toHaveBeenCalled();
+      
+      // Verify parameters were passed correctly
+      const callArgs = downloadActionWithWitness.mock.calls[0];
+      expect(callArgs[0]).toBe(actionRef);
+      expect(callArgs[1]).toBe('/path/to/witness');
+      expect(callArgs[2]).toHaveProperty('step', 'test-step-download');
       
       // Verify environment was prepared
       expect(runner.getWrappedActionEnv).toHaveBeenCalled();

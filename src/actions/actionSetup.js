@@ -52,6 +52,67 @@ async function downloadAndSetupAction(actionRef) {
   core.info(`Successfully set up action at: ${tempDir}`);
   return tempDir;
 }
+
+/**
+ * Downloads a GitHub Action repository and creates an attestation of the download.
+ * This creates a separate attestation for the download process to enhance provenance.
+ */
+async function downloadActionWithWitness(actionRef, witnessExePath, witnessOptions) {
+  // Reuse the existing download function to avoid code duplication
+  const tempDir = await downloadAndSetupAction(actionRef);
+  core.info(`Downloaded action at: ${tempDir}, preparing attestation`);
+  
+  // Now that we have the repository cloned, run witness attestation on it
+  const assembleWitnessArgs = require("../attestation/assembleWitnessArgs");
+  
+  // Only use git and github attestors for download attestation
+  // Do NOT use user-provided attestors for security reasons
+  const attestations = [
+    'git',    // Git metadata
+    'github'  // GitHub-specific context if available
+  ]
+  
+  // Use provided download options, but ensure we have the necessary settings
+  const downloadOptions = {
+    ...witnessOptions,
+    attestations,
+    // Set working directory to the cloned repo
+    workingdir: tempDir
+  };
+  
+  // If no outfile specified, create a default one
+  if (!downloadOptions.outfile) {
+    downloadOptions.outfile = path.join(os.tmpdir(), `${downloadOptions.step}-attestation.json`);
+  }
+  
+  // Run a simple command with witness to capture attestation of the cloned repo
+  // Using 'git rev-parse HEAD' to get current commit hash and trigger git attestor
+  const witnessArgs = assembleWitnessArgs(downloadOptions, ['git', 'rev-parse', 'HEAD']);
+  
+  let output = "";
+  
+  // Execute git rev-parse with witness to capture attestation
+  core.info(`Running witness to attest cloned repository: ${witnessExePath} ${witnessArgs.join(" ")}`);
+  await exec.exec(witnessExePath, witnessArgs, {
+    cwd: tempDir,
+    env: process.env,
+    listeners: {
+      stdout: (data) => {
+        output += data.toString();
+      },
+      stderr: (data) => {
+        output += data.toString();
+      }
+    }
+  });
+  
+  core.info(`Successfully set up action at: ${tempDir} with attestation at ${downloadOptions.outfile}`);
+  return {
+    actionDir: tempDir,
+    attestationOutput: output,
+    attestationFile: downloadOptions.outfile
+  };
+}
   
 
 // Import the function from actionUtils to avoid duplication
@@ -70,6 +131,7 @@ function cleanUpDirectory(dir) {
 
 module.exports = {
   downloadAndSetupAction,
+  downloadActionWithWitness,
   getActionYamlPath,
   cleanUpDirectory
 };

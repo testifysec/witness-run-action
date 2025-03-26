@@ -9,7 +9,7 @@ const { downloadAndSetupWitness } = require('../core/witnessDownloader');
 const getWitnessOptions = require('../attestation/getWitnessOptions');
 const { runActionWithWitness, runDirectCommandWithWitness } = require('./commandRunners');
 const { handleGitOIDs } = require('../attestation/gitOidUtils');
-const { downloadAndSetupAction, cleanUpDirectory } = require('../actions/actionSetup');
+const { downloadAndSetupAction, downloadActionWithWitness, cleanUpDirectory } = require('../actions/actionSetup');
 
 /**
  * Main action runner class
@@ -141,10 +141,54 @@ class WitnessActionRunner {
     if (actionRef.startsWith('./') || actionRef.startsWith('../')) {
       this.actionDir = this.resolveLocalActionPath(actionRef);
     } else {
-      // Download remote action
-      core.info(`Downloading remote action: ${actionRef}`);
-      this.actionDir = await downloadAndSetupAction(actionRef);
-      core.info(`Downloaded action to: ${this.actionDir}`);
+      // Download remote action with witness attestation
+      core.info(`Downloading remote action with witness attestation: ${actionRef}`);
+      
+      // Create download-specific options
+      const downloadStepName = `${this.witnessOptions.step}-download`;
+      
+      // Use custom output path if specified by user, otherwise use default
+      let downloadOutfile = this.witnessOptions.outfile;
+      if (downloadOutfile) {
+        // If user provided an outfile, create a download-specific variant
+        const outfileExt = path.extname(downloadOutfile);
+        const outfileBase = path.basename(downloadOutfile, outfileExt);
+        const outfileDir = path.dirname(downloadOutfile);
+        downloadOutfile = path.join(outfileDir, `${outfileBase}-download${outfileExt}`);
+      }
+      
+      // Clone options to avoid modifying the original
+      const downloadOptions = {
+        ...this.witnessOptions,
+        step: downloadStepName,
+        outfile: downloadOutfile
+      };
+      
+      const downloadResult = await downloadActionWithWitness(
+        actionRef,
+        this.witnessExePath,
+        downloadOptions
+      );
+      
+      this.actionDir = downloadResult.actionDir;
+      
+      // Process download attestation output for GitOIDs
+      if (downloadResult.attestationOutput) {
+        handleGitOIDs(
+          downloadResult.attestationOutput,
+          downloadOptions.archivistaServer,
+          downloadStepName,
+          ['git', 'github'] // Only git and github attestors are used for download
+        );
+        
+        // Set output for download attestation file
+        if (downloadResult.attestationFile) {
+          core.setOutput("download_attestation_file", downloadResult.attestationFile);
+          core.info(`Download attestation created at: ${downloadResult.attestationFile}`);
+        }
+      }
+      
+      core.info(`Downloaded action with attestation to: ${this.actionDir}`);
     }
     
     // Prepare environment for the wrapped action

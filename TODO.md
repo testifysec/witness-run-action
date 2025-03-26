@@ -40,12 +40,19 @@ This file outlines the key tasks for improving the witness-run-action codebase, 
 
 ## Low Priority Enhancements
 
-### 6. Error Handling
+### 6. Docker Image Attestation
+
+- [ ] Add attestation for Docker image downloads
+- [ ] Capture Docker image digests and metadata 
+- [ ] Create a separate attestation step for Docker pulls
+- [ ] Support signature verification for Docker images if available
+
+### 7. Error Handling
 
 - [ ] Improve error messages to be more actionable
 - [ ] Add consistent error handling patterns
 
-### 7. Documentation
+### 8. Documentation
 
 - [ ] Update README with clear examples
 - [ ] Document differences in behavior between witness-run-action and GitHub Actions runner
