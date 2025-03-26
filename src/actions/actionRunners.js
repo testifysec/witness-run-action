@@ -187,8 +187,10 @@ async function runJsActionWithWitness(actionDir, actionConfig, witnessOptions, w
         const str = data.toString();
         output += str;
         
-        // Log everything for better debugging
-        if (str.includes('error') || str.includes('fatal')) {
+        // Log only actual errors, skip things like event payload contents
+        if ((str.includes('error') || str.includes('fatal')) && 
+            !str.includes('The event payload:') && 
+            !str.includes('payload":')) {
           core.warning(`STDOUT (error detected): ${str.trim()}`);
         }
       },
@@ -199,7 +201,16 @@ async function runJsActionWithWitness(actionDir, actionConfig, witnessOptions, w
         // Process Witness stderr output, only warning on actual errors
         if (str.trim()) {
           const line = str.trim();
-          if (line.includes('level=error') || line.includes('level=fatal') || line.includes('level=warning')) {
+          // Filter out common expected errors that happen during tests or when optional credentials aren't provided
+          const isExpectedError = 
+            line.includes('failed to create kms signer: no kms provider found for key reference') ||
+            line.includes('failed to create vault signer: url is a required option') ||
+            line.includes('Unexpected input') ||
+            // Add other patterns to ignore here
+            false;
+
+          if ((line.includes('level=error') || line.includes('level=fatal') || line.includes('level=warning')) 
+              && !isExpectedError) {
             core.warning(`Witness stderr: ${line}`);
           } else {
             // Just info or debug messages, use core.debug
@@ -607,7 +618,16 @@ async function runDockerActionWithWitness(actionDir, actionConfig, witnessOption
           // Process Witness stderr output, only warning on actual errors
           if (str.trim()) {
             const line = str.trim();
-            if (line.includes('level=error') || line.includes('level=fatal') || line.includes('level=warning')) {
+            // Filter out common expected errors that happen during tests or when optional credentials aren't provided
+            const isExpectedError = 
+              line.includes('failed to create kms signer: no kms provider found for key reference') ||
+              line.includes('failed to create vault signer: url is a required option') ||
+              line.includes('Unexpected input') ||
+              // Add other patterns to ignore here
+              false;
+
+            if ((line.includes('level=error') || line.includes('level=fatal') || line.includes('level=warning')) 
+                && !isExpectedError) {
               core.warning(`Witness stderr: ${line}`);
             } else {
               // Just info or debug messages, use core.debug

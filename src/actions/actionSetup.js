@@ -107,7 +107,16 @@ async function downloadActionWithWitness(actionRef, witnessExePath, witnessOptio
         // Process Witness stderr output, only warning on actual errors
         if (str.trim()) {
           const line = str.trim();
-          if (line.includes('level=error') || line.includes('level=fatal') || line.includes('level=warning')) {
+          // Filter out common expected errors that happen during tests or when optional credentials aren't provided
+          const isExpectedError = 
+            line.includes('failed to create kms signer: no kms provider found for key reference') ||
+            line.includes('failed to create vault signer: url is a required option') ||
+            line.includes('Unexpected input') ||
+            // Add other patterns to ignore here
+            false;
+
+          if ((line.includes('level=error') || line.includes('level=fatal') || line.includes('level=warning')) 
+              && !isExpectedError) {
             core.warning(`Witness stderr: ${line}`);
           } else {
             // Just info or debug messages, use core.debug
