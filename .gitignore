@@ -1,1 +1,5 @@
 node_modules/
+*.wip.js
+ncc
+testify-run-action@*.*.*/
+coverage/

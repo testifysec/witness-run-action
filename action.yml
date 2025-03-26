@@ -1,20 +1,55 @@
 name: witness-run
 description: "Creates Attestation of CI Process with Witness"
 inputs:
-  witness-install-dir:
-    description: "Directory to install witness in. The directory will be created if it does not exist"
+  # Core inputs
+  action-ref:
+    description: "Reference to a GitHub Action to run (format: owner/repo@ref). If provided, command is ignored."
     required: false
-    default: "./"
+  command:
+    description: "command to run (not needed if action-ref is provided)"
+    required: false
+  step:
+    description: "Name of the step being run"
+    required: true
+  witness_version:
+    description: "Version of Witness CLI"
+    required: false
+    default: "0.8.1"
+  witness-args:
+    description: "Additional command-line arguments to pass to Witness (space-separated). Useful for undocumented or future options not yet supported explicitly by this action."
+    required: false
+  
+  # Basic settings
+  outfile:
+    description: "File to which to write signed data"
+    required: false
+  witness_trace:
+    description: "Enable tracing for the command"
+    required: false
+    default: "false"
+  workingdir:
+    description: "Directory from which commands will run"
+    required: false
+  
+  # Attestation settings
+  attestations:
+    description: "Attestations to record ('product' and 'material' are always recorded)"
+    required: false
+    default: "environment git github"
+  
+  # Archivista settings
+  enable-archivista:
+    description: "Use Archivista to store or retrieve attestations"
+    required: false
+    default: "true"
   archivista-server:
     description: "URL of the Archivista server to store or retrieve attestations"
     required: false
     default: "https://archivista.testifysec.io"
-  attestations:
-    description: "Attestations to record"
-    required: false
-    default: "environment git github"
+  
+  # Attestor settings
   attestor-link-export:
-    description: "Export the attestor link predicate in its own attestation"
+    description: "Export the Link predicate in its own attestation"
     required: false
     default: "false"
   attestor-maven-pom-path:
@@ -25,21 +60,20 @@ inputs:
     required: false
     default: "false"
   attestor-slsa-export:
-    description: "Export the SLSA predicate in its own attestation"
+    description: "Export the SLSA provenance predicate in its own attestation"
     required: false
     default: "false"
+  product-exclude-glob:
+    description: "Pattern to use when recording products. Files that match this pattern will be excluded as subjects on the attestation."
+    required: false
+  product-include-glob:
+    description: "Pattern to use when recording products. Files that match this pattern will be included as subjects on the attestation."
+    required: false
+    default: "*"
+  
+  # Signer settings - Sigstore
   enable-sigstore:
     description: 'Use Sigstore for attestation'
-    required: false
-    default: "true"
-  command:
-    description: "command to run"
-    required: true
-  certificate:
-    description: "Path to the signing key's certificate"
-    required: false
-  enable-archivista:
-    description: "Use Archivista to store or retrieve attestations"
     required: false
     default: "true"
   fulcio:
@@ -51,43 +85,130 @@ inputs:
   fulcio-oidc-issuer:
     description: "OIDC issuer to use for authentication"
     required: false
-  fulcio-token:
-    description: "Raw token to use for authentication"
+  fulcio-oidc-redirect-url:
+    description: "OIDC redirect URL (Optional). The default oidc-redirect-url is 'http://localhost:0/auth/callback'"
     required: false
-  intermediates:
-    description: "Intermediates that link trust back to a root of trust in the policy"
+  fulcio-token:
+    description: "Raw token string to use for authentication to fulcio"
+    required: false
+  fulcio-token-path:
+    description: "Path to the file containing a raw token to use for authentication to fulcio"
+    required: false
+  
+  # Signer settings - File
+  certificate:
+    description: "Path to the signing key's certificate"
     required: false
   key:
     description: "Path to the signing key"
     required: false
-  outfile:
-    description: "File to which to write signed data. Defaults to stdout"
+  intermediates:
+    description: "Intermediates that link trust back to a root of trust in the policy"
     required: false
-  product-exclude-glob:
-    description: "Pattern to use when recording products. Files that match this pattern will be excluded as subjects on the attestation."
+  
+  # Signer settings - KMS (AWS)
+  kms-aws-config-file:
+    description: "The shared configuration file to use with the AWS KMS signer provider"
     required: false
-  product-include-glob:
-    description: "Pattern to use when recording products. Files that match this pattern will be included as subjects on the attestation."
+  kms-aws-credentials-file:
+    description: "The shared credentials file to use with the AWS KMS signer provider"
     required: false
+  kms-aws-insecure-skip-verify:
+    description: "Skip verification of the server's certificate chain and host name"
+    required: false
+    default: "false"
+  kms-aws-profile:
+    description: "The shared configuration profile to use with the AWS KMS signer provider"
+    required: false
+  kms-aws-remote-verify:
+    description: "Verify signature using AWS KMS remote verification. If false, the public key will be pulled from AWS KMS and verification will take place locally"
+    required: false
+    default: "true"
+    
+  # Signer settings - KMS (GCP)
+  kms-gcp-credentials-file:
+    description: "The credentials file to use with the GCP KMS signer provider"
+    required: false
+
+  # Signer settings - KMS (General)
+  kms-hash-type:
+    description: "The hash type to use for signing"
+    required: false
+    default: "sha256"
+  kms-key-version:
+    description: "The key version to use for signing"
+    required: false
+  kms-ref:
+    description: "The KMS Reference URI to use for connecting to the KMS service"
+    required: false
+    
+  # Signer settings - SPIFFE
   spiffe-socket:
     description: "Path to the SPIFFE Workload API socket"
     required: false
-  step:
-    description: "Name of the step being run"
-    required: true
+    
+  # Signer settings - Vault
+  vault-altnames:
+    description: "Alt names to use for the generated certificate. All alt names must be allowed by the vault role policy"
+    required: false
+  vault-commonname:
+    description: "Common name to use for the generated certificate. Must be allowed by the vault role policy"
+    required: false
+  vault-namespace:
+    description: "Vault namespace to use"
+    required: false
+  vault-pki-secrets-engine-path:
+    description: "Path to the Vault PKI Secrets Engine to use"
+    required: false
+    default: "pki"
+  vault-role:
+    description: "Name of the Vault role to generate the certificate for"
+    required: false
+  vault-token:
+    description: "Token to use to connect to Vault"
+    required: false
+  vault-ttl:
+    description: "Time to live for the generated certificate. Defaults to the vault role policy's configured TTL if not provided"
+    required: false
+  vault-url:
+    description: "Base url of the Vault instance to connect to"
+    required: false
+  
+  # Timestamp settings
   timestamp-servers:
     description: "Timestamp Authority Servers to use when signing envelope"
     required: false
-  trace:
-    description: "Enable tracing for the command"
+  
+  # Hash settings
+  hashes:
+    description: "Hashes selected for digest calculation (space separated)"
+    required: false
+    default: "sha256"
+  
+  # Environment variable settings
+  env-add-sensitive-key:
+    description: "Add keys or globs (e.g. '*TEXT') to the list of sensitive environment keys"
+    required: false
+  env-disable-default-sensitive-vars:
+    description: "Disable the default list of sensitive vars and only use the items mentioned by --add-sensitive-key"
     required: false
     default: "false"
-  version:
-    description: "Version of Witness CLI"
+  env-exclude-sensitive-key:
+    description: "Exclude specific keys from the list of sensitive environment keys. Does not support globs"
     required: false
-    default: "0.8.0"
-  workingdir:
-    description: "Directory from which commands will run"
+  env-filter-sensitive-vars:
+    description: "Switch from obfuscate to filtering variables which removes them from the output completely"
+    required: false
+    default: "false"
+  
+  # Dirhash settings
+  dirhash-glob:
+    description: "Dirhash glob can be used to collapse material and product hashes on matching directory matches"
+    required: false
+  
+  # Wildcard for other inputs
+  "*":
+    description: "Any other input"
     required: false
 
 runs:
