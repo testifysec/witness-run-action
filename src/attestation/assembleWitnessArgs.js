@@ -202,11 +202,9 @@ function assembleWitnessArgs(witnessOptions, extraArgs = []) {
   if (productIncludeGlob) cmd.push(`--attestor-product-include-glob=${productIncludeGlob}`);
   
   // Process Archivista settings
-  // Log the actual enable-archivista value being passed to witness
-  core.info(`Passing --enable-archivista=${enableArchivista} (${typeof enableArchivista})`);
-  
-  // Handle boolean values by converting them to strings 'true' or 'false'
+  // Only add the enableArchivista flag if explicitly provided
   if (enableArchivista !== undefined) {
+    // Handle boolean values by converting them to strings 'true' or 'false'
     const stringValue = enableArchivista === true ? 'true' : 'false';
     cmd.push(`--enable-archivista=${stringValue}`);
   }
