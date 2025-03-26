@@ -1,0 +1,9 @@
+{
+  "name": "default-values-test-action",
+  "version": "1.0.0",
+  "description": "Test action for verifying default value propagation",
+  "main": "index.js",
+  "dependencies": {
+    "@actions/core": "^1.10.0"
+  }
+}

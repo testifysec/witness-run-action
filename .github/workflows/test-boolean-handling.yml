@@ -1,0 +1,47 @@
+name: Test Boolean Input Handling
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-boolean-handling:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Debug with Boolean Parameters
+        uses: ./
+        with:
+          step: boolean-test
+          action-ref: actions/github-script@v6
+          string-input: "String value test"
+          boolean-input: false
+          install-only: true
+          script: |
+            console.log("=== BOOLEAN INPUT TEST ===");
+            console.log("All environment variables:");
+            Object.keys(process.env)
+              .filter(key => key.startsWith('INPUT_'))
+              .forEach(key => {
+                console.log(`${key}=${process.env[key]} (type: ${typeof process.env[key]})`);
+                
+                // Check if this is a boolean-like value
+                if (process.env[key] === 'true' || process.env[key] === 'false') {
+                  console.log(`  BOOLEAN VALUE DETECTED: ${key}`);
+                }
+              });
+              
+            // Test boolean handling
+            console.log("\nBoolean Input Test:");
+            console.log(`INPUT_BOOLEAN_INPUT=${process.env.INPUT_BOOLEAN_INPUT}`);
+            console.log(`INPUT_INSTALL_ONLY=${process.env.INPUT_INSTALL_ONLY}`);
+            
+            // Test what happens when converting these values
+            console.log("\nBoolean conversion test:");
+            // Using explicit boolean conversion
+            console.log(`String 'true' to Boolean: ${Boolean('true')}`);
+            console.log(`String 'false' to Boolean: ${Boolean('false')}`);
+            // Using implicit conversion
+            console.log(`if('true'): ${('true') ? 'truthy' : 'falsy'}`);
+            console.log(`if('false'): ${('false') ? 'truthy' : 'falsy'}`);
