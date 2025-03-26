@@ -105,8 +105,8 @@ describe('commandRunners', () => {
       );
       
       // Check that the info message about applied defaults is logged
+      // Note: We no longer log default values to prevent potential exposure of secrets
       expect(mockCore.info).toHaveBeenCalledWith(expect.stringContaining('Applied 1 default values'));
-      expect(mockCore.info).toHaveBeenCalledWith(expect.stringContaining('test-default'));
       
       // Verify the mock updated the environment
       expect(actionEnv).toHaveProperty('INPUT_TEST', 'test-value');
