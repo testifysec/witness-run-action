@@ -67,16 +67,35 @@ async function run() {
       core.setFailed('❌ boolean-input-true was not converted to a boolean type');
     }
     
+    // Determine if this is an override test based on the inputs
+    const isOverrideTest = process.env.INPUT_TEST_MODE === 'override' ||
+                          (stringInput !== 'default string value' && booleanInput !== false);
+    
+    // Define expected values based on test mode
+    const expectedValues = isOverrideTest ? {
+      stringInput: process.env.EXPECTED_STRING_INPUT || 'custom string', 
+      booleanInput: process.env.EXPECTED_BOOLEAN_INPUT === 'false' ? false : true,
+      booleanInputTrue: process.env.EXPECTED_BOOLEAN_INPUT_TRUE === 'true' ? true : false,
+      numberInput: process.env.EXPECTED_NUMBER_INPUT || '100',
+      requiredInput: process.env.EXPECTED_REQUIRED_INPUT || 'different value'
+    } : {
+      stringInput: 'default string value',
+      booleanInput: false, 
+      booleanInputTrue: true,
+      numberInput: '42',
+      requiredInput: requiredInput // required value has no default
+    };
+    
     // Create a summary of the test results
     const summary = [
-      '# Default Values Test Results',
+      `# Default Values Test Results${isOverrideTest ? ' (Override Test)' : ''}`,
       '',
       '| Input | Expected | Received | Type | Result |',
       '| ----- | -------- | -------- | ---- | ------ |',
-      `| string-input | "default string value" | "${stringInput}" | ${typeof stringInput} | ${stringInput === 'default string value' ? '✅' : '❌'} |`,
-      `| boolean-input | false | ${booleanInput} | ${typeof booleanInput} | ${booleanInput === false ? '✅' : '❌'} |`,
-      `| boolean-input-true | true | ${booleanInputTrue} | ${typeof booleanInputTrue} | ${booleanInputTrue === true ? '✅' : '❌'} |`,
-      `| number-input | "42" | "${numberInput}" | ${typeof numberInput} | ${numberInput === '42' ? '✅' : '❌'} |`,
+      `| string-input | "${expectedValues.stringInput}" | "${stringInput}" | ${typeof stringInput} | ${stringInput === expectedValues.stringInput ? '✅' : '❌'} |`,
+      `| boolean-input | ${expectedValues.booleanInput} | ${booleanInput} | ${typeof booleanInput} | ${booleanInput === expectedValues.booleanInput ? '✅' : '❌'} |`,
+      `| boolean-input-true | ${expectedValues.booleanInputTrue} | ${booleanInputTrue} | ${typeof booleanInputTrue} | ${booleanInputTrue === expectedValues.booleanInputTrue ? '✅' : '❌'} |`,
+      `| number-input | "${expectedValues.numberInput}" | "${numberInput}" | ${typeof numberInput} | ${numberInput === expectedValues.numberInput ? '✅' : '❌'} |`,
       `| required-input | [required value] | "${requiredInput}" | ${typeof requiredInput} | ${requiredInput ? '✅' : '❌'} |`,
     ].join('\n');
     
