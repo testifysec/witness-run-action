@@ -162,8 +162,6 @@ async function run() {
   process.env.PATH = `${process.env.PATH}:/bin:/usr/bin`;
 
   process.chdir(fullWorkspacePath);
-  // Change working directory to the root of the repo
-  process.chdir(process.env.GITHUB_WORKSPACE);
 
   const commandArray = command.match(/(?:[^\s"]+|"[^"]*")+/g);
 
