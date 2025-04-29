@@ -30112,7 +30112,10 @@ const path = __nccwpck_require__(6928);
 const tc = __nccwpck_require__(3472);
 
 async function run() {
-  const witnessInstallDir = core.getInput("witness-install-dir") || "./";
+  const workingdir = core.getInput("workingdir");
+  const fullWorkspacePath = path.join(index_process.env.GITHUB_WORKSPACE, workingdir);
+  const witnessInstallDir = core.getInput('witness-install-dir') || fullWorkspacePath;
+
   // Download Witness
   const version = core.getInput("version");
 
@@ -30127,26 +30130,26 @@ async function run() {
     if (index_process.platform === "win32") {
       witnessTar = await tc.downloadTool(
         "https://github.com/in-toto/witness/releases/download/v" +
-          version +
-          "/witness_" +
-          version +
-          "_windows_amd64.tar.gz"
+        version +
+        "/witness_" +
+        version +
+        "_windows_amd64.tar.gz"
       );
     } else if (index_process.platform === "darwin") {
       witnessTar = await tc.downloadTool(
         "https://github.com/in-toto/witness/releases/download/v" +
-          version +
-          "/witness_" +
-          version +
-          "_darwin_amd64.tar.gz"
+        version +
+        "/witness_" +
+        version +
+        "_darwin_amd64.tar.gz"
       );
     } else {
       witnessTar = await tc.downloadTool(
         "https://github.com/in-toto/witness/releases/download/v" +
-          version +
-          "/witness_" +
-          version +
-          "_linux_amd64.tar.gz"
+        version +
+        "/witness_" +
+        version +
+        "_linux_amd64.tar.gz"
       );
     }
 
@@ -30189,7 +30192,6 @@ async function run() {
 
   let timestampServers = core.getInput("timestamp-servers");
   const trace = core.getInput("trace");
-  const workingdir = core.getInput("workingdir");
   const enableSigstore = core.getInput("enable-sigstore") === "true";
   const command = core.getInput("command");
 
@@ -30257,11 +30259,12 @@ async function run() {
 
   if (trace) cmd.push(`--trace=${trace}`);
   if (outfile) cmd.push(`--outfile=${outfile}`);
-  core.info("Running in directory " + index_process.env.GITHUB_WORKSPACE);
+  core.info("Running in directory " + fullWorkspacePath);
 
   index_process.env.PATH = `${__dirname}:${index_process.env.PATH}`;
   index_process.env.PATH = `${index_process.env.PATH}:/bin:/usr/bin`;
 
+  index_process.chdir(fullWorkspacePath);
   // Change working directory to the root of the repo
   index_process.chdir(index_process.env.GITHUB_WORKSPACE);
 
