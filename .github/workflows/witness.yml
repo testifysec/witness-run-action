@@ -47,6 +47,9 @@ on:
         default: "https://archivista.testifysec.io"
         required: false
         type: string
+      workingdir:
+        required: false
+        type: string
 
 jobs:
   witness:
@@ -68,6 +71,7 @@ jobs:
         with:
           version: 0.9.1
           archivista-server: ${{ inputs.archivista-server }}
+          workingdir: ${{ inputs.workingdir }}
           step: pre-${{ inputs.step }}
           attestations: ${{ inputs.pre-command-attestations }}
           command: /bin/sh -c "${{ inputs.pre-command }}"
@@ -79,6 +83,7 @@ jobs:
         with:
           version: 0.9.1
           archivista-server: ${{ inputs.archivista-server }}
+          workingdir: ${{ inputs.workingdir }}
           step: ${{ inputs.step }}
           attestations: ${{ inputs.attestations }}
           command: /bin/sh -c "${{ inputs.command }}"
