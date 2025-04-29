@@ -67,7 +67,7 @@ jobs:
           path: /tmp
 
       - if: ${{ inputs.pre-command != '' && inputs.pull_request == false }}
-        uses: testifysec/witness-run-action@79320a907f611f2fb40ced8e13c66af988b2d9db
+        uses: testifysec/witness-run-action@674c559c6a84e6701de9ef880f2e5c31b89010ea
         with:
           version: 0.9.1
           archivista-server: ${{ inputs.archivista-server }}
@@ -77,9 +77,10 @@ jobs:
           command: /bin/sh -c "${{ inputs.pre-command }}"
       - if: ${{ inputs.pre-command != '' && inputs.pull_request == true }}
         run: ${{ inputs.pre-command }}
+        working-directory: ${{ inputs.workingdir }}
 
       - if: ${{ inputs.pull_request == false }}
-        uses: testifysec/witness-run-action@79320a907f611f2fb40ced8e13c66af988b2d9db
+        uses: testifysec/witness-run-action@674c559c6a84e6701de9ef880f2e5c31b89010ea
         with:
           version: 0.9.1
           archivista-server: ${{ inputs.archivista-server }}
@@ -89,6 +90,7 @@ jobs:
           command: /bin/sh -c "${{ inputs.command }}"
       - if: ${{ inputs.pull_request == true }}
         run: ${{ inputs.command }}
+        working-directory: ${{ inputs.workingdir }}
 
       - if: ${{ inputs.artifact-upload-path != '' && inputs.artifact-upload-name != ''}}
         uses: actions/upload-artifact@26f96dfa697d77e81fd5907df203aa23a56210a8 # v4.3.0
