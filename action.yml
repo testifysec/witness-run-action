@@ -4,7 +4,6 @@ inputs:
   witness-install-dir:
     description: "Directory to install witness in. The directory will be created if it does not exist"
     required: false
-    default: "./"
   archivista-server:
     description: "URL of the Archivista server to store or retrieve attestations"
     required: false
@@ -29,7 +28,7 @@ inputs:
     required: false
     default: "false"
   enable-sigstore:
-    description: 'Use Sigstore for attestation'
+    description: "Use Sigstore for attestation"
     required: false
     default: "true"
   command:
