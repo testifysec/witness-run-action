@@ -1,12 +1,11 @@
-
 permissions:
   id-token: write # This is required for requesting the JWT
-  contents: read  # This is required for actions/checkout
+  contents: read # This is required for actions/checkout
 name: Test Action
 on:
   push:
     branches:
-      - '*'
+      - "*"
 
 jobs:
   test-action:
@@ -19,6 +18,7 @@ jobs:
         uses: ./ # Replace this with the path to your action if different
         with:
           step: test
+          version: 0.9.1
           command: echo hello > hello.txt
           enable-sigstore: true
           enable-archivista: true
