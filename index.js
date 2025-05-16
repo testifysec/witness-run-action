@@ -70,6 +70,7 @@ async function run() {
 
   const step = core.getInput("step");
   const archivistaServer = core.getInput("archivista-server");
+  const archivistaHeaders = core.getInput("archivista-headers");
   const attestations = core.getInput("attestations").split(" ");
   const certificate = core.getInput("certificate");
   const enableArchivista = core.getInput("enable-archivista") === "true";
@@ -124,6 +125,13 @@ async function run() {
   if (certificate) cmd.push(`--certificate=${certificate}`);
   if (enableArchivista) cmd.push(`--enable-archivista=${enableArchivista}`);
   if (archivistaServer) cmd.push(`--archivista-server=${archivistaServer}`);
+  if (archivistaHeaders) {
+    const splitHeaders = archivistaHeaders.split(/\r|\n/);
+    splitHeaders.forEach((header) => {
+      cmd.push(`--archivista-headers="${header.trim()}"`);
+    });
+  }
+
   if (fulcio) cmd.push(`--signer-fulcio-url=${fulcio}`);
   if (fulcioOidcClientId) cmd.push(`--signer-fulcio-oidc-client-id=${fulcioOidcClientId}`);
   if (fulcioOidcIssuer) cmd.push(`--signer-fulcio-oidc-issuer=${fulcioOidcIssuer}`);

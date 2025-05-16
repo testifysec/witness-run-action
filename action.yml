@@ -8,6 +8,10 @@ inputs:
     description: "URL of the Archivista server to store or retrieve attestations"
     required: false
     default: "https://archivista.testifysec.io"
+  archivista-headers:
+    description: "Headers to include when making requests to Archivista. Input is expected to be new line separated"
+    required: false
+    default: ""
   attestations:
     description: "Attestations to record"
     required: false
@@ -84,7 +88,7 @@ inputs:
   version:
     description: "Version of Witness CLI"
     required: false
-    default: "0.8.0"
+    default: "0.9.2"
   workingdir:
     description: "Directory from which commands will run"
     required: false
