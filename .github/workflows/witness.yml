@@ -18,6 +18,10 @@ on:
       pull_request:
         required: true
         type: boolean
+      version:
+        required: false
+        default: "0.9.2"
+        type: string
       artifact-download:
         required: false
         type: string
@@ -47,6 +51,10 @@ on:
         default: "https://archivista.testifysec.io"
         required: false
         type: string
+      archivista-headers:
+        default: ""
+        required: false
+        type: string
       workingdir:
         required: false
         type: string
@@ -69,8 +77,9 @@ jobs:
       - if: ${{ inputs.pre-command != '' && inputs.pull_request == false }}
         uses: testifysec/witness-run-action@d013777c8bc3ac5ce480c003f0f9db0206629bd3
         with:
-          version: 0.9.1
+          version: ${{ inputs.version }}
           archivista-server: ${{ inputs.archivista-server }}
+          archivista-headers: ${{ inputs.archivista-headers }}
           workingdir: ${{ inputs.workingdir }}
           step: pre-${{ inputs.step }}
           attestations: ${{ inputs.pre-command-attestations }}
@@ -82,8 +91,9 @@ jobs:
       - if: ${{ inputs.pull_request == false }}
         uses: testifysec/witness-run-action@d013777c8bc3ac5ce480c003f0f9db0206629bd3
         with:
-          version: 0.9.1
+          version: ${{ inputs.version }}
           archivista-server: ${{ inputs.archivista-server }}
+          archivista-headers: ${{ inputs.archivista-headers }}
           workingdir: ${{ inputs.workingdir }}
           step: ${{ inputs.step }}
           attestations: ${{ inputs.attestations }}

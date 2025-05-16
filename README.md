@@ -37,17 +37,20 @@ jobs:
 ```
 
 ## Using Sigstore and Archivista Flags
+
 This action supports the use of Sigstore and Archivista for creating attestations.
 By enabling the option `enable-archivista`, you create a public record of your
 attestations, which can be useful for transparency and compliance.
 
 ### Sigstore
+
 Sigstore is an open-source platform for securely signing software artifacts. When
 the `enable-sigstore` flag is set to true, this action will use Sigstore for signing
 the attestation. This creates a publicly verifiable record of the attestation on
 the Sigstore public instance, sigstore.dev
 
 ### Archivista
+
 Archivista is a server that stores and retrieves attestations. When the `enable-archivista`
 flag is set to true, this action will use Archivista for storing and retrieving
 attestations. By default, the attestations are stored on a public Archivista server,
@@ -61,11 +64,12 @@ Timestamp Authority (TSA) service, to provide trusted timestamping for your
 attestations. Timestamping is a critical aspect of creating non-repudiable and
 legally binding attestations. FreeTSA offers a reliable and convenient solution for
 timestamping without the need for setting up and managing your own TSA. When using
-this action, the `timestamp-servers` input is set to FreeTSA's service (https://freetsa.org/)
+this action, the `timestamp-servers` input is set to FreeTSA's service (<https://freetsa.org/>)
 by default, ensuring your attestations are properly timestamped with a trusted and
 publicly verifiable source.
 
 ### Privacy Considerations
+
 If you want to keep the details of your attestations private, you can set up
 and host your own instances of Archivista and Sigstore. This allows you to manage
 access control and ensure that only authorized users can view the attestation details.
@@ -78,7 +82,6 @@ inputs to match your Sigstore instance's OIDC configuration.
 Please consult the documentation for Archivista and Sigstore on how to set up and
 host your own instances.
 
-
 ### Inputs
 
 | Name                     | Description                                                                                          | Required | Default                               |
@@ -86,6 +89,7 @@ host your own instances.
 | witness-install-dir      | Directory to install the witness tool into. The directory will attempted to be created if it does not exists | No       | ./ |
 | enable-sigstore          | Use Sigstore for attestation. Sets default values for fulcio, fulcio-oidc-client-id, fulcio-oidc-issuer, and timestamp-servers when true | No       | true |
 | enable-archivista        | Use Archivista to store or retrieve attestations                                                     | No       | true                                 | true |
+| archivista-headers       | Headers to include when making requests to Archivista. Input is expected to be new line separated list of headers | No |  |
 | archivista-server        | URL of the Archivista server to store or retrieve attestations                                       | No       | <https://archivista.testifysec.io>      |
 | attestations             | Attestations to record, space-separated                                                              | No       | environment git github                      |
 | certificate              | Path to the signing key's certificate                                                                | No       |                                       |
@@ -103,4 +107,3 @@ host your own instances.
 | timestamp-servers        | Timestamp Authority Servers to use when signing envelope, space-separated                           | No       |                                       |
 | trace                    | Enable tracing for the command                                                                       | No       | false                                 |
 | workingdir               | Directory from which commands will run                                                               | No       |                                       |
-
