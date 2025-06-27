@@ -36,6 +36,34 @@ jobs:
           command: make build
 ```
 
+## Using Reusable Workflows
+
+For a streamlined setup, you can use our reusable workflow. This is especially useful when you need to pass secrets like API tokens for authentication:
+
+```yaml
+permissions:
+  id-token: write # This is required for requesting the JWT
+  contents: read  # This is required for actions/checkout
+
+name: Build with Witness
+on: [push, pull_request]
+
+jobs:
+  build:
+    uses: testifysec/witness-run-action/.github/workflows/witness.yml@main
+    with:
+      pull_request: ${{ github.event_name == 'pull_request' }}
+      step: build
+      attestations: "git github environment"
+      archivista-server: "https://archivista.yourdomain.com"
+      command: |
+        make build
+    secrets:
+      archivista-headers-token: ${{ secrets.WITNESS_API_TOKEN }}
+```
+
+> **Important:** When using reusable workflows, secrets must be passed using the `secrets` keyword, not the `with` keyword. This ensures proper security handling of sensitive values like API tokens. Pass your API token as `archivista-headers-token` and the workflow will format it correctly as an authorization header.
+
 ## Using Sigstore and Archivista Flags
 
 This action supports the use of Sigstore and Archivista for creating attestations.
