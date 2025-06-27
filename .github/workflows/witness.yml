@@ -51,13 +51,12 @@ on:
         default: "https://archivista.testifysec.io"
         required: false
         type: string
-      archivista-headers:
-        default: ""
-        required: false
-        type: string
       workingdir:
         required: false
         type: string
+    secrets:
+      archivista-headers-token:
+        required: false
 
 jobs:
   witness:
@@ -75,11 +74,11 @@ jobs:
           path: /tmp
 
       - if: ${{ inputs.pre-command != '' && inputs.pull_request == false }}
-        uses: testifysec/witness-run-action@d013777c8bc3ac5ce480c003f0f9db0206629bd3
+        uses: testifysec/witness-run-action@main
         with:
           version: ${{ inputs.version }}
           archivista-server: ${{ inputs.archivista-server }}
-          archivista-headers: ${{ inputs.archivista-headers }}
+          archivista-headers: "Authorization: Token ${{ secrets.archivista-headers-token }}"
           workingdir: ${{ inputs.workingdir }}
           step: pre-${{ inputs.step }}
           attestations: ${{ inputs.pre-command-attestations }}
@@ -89,11 +88,11 @@ jobs:
         working-directory: ${{ inputs.workingdir }}
 
       - if: ${{ inputs.pull_request == false }}
-        uses: testifysec/witness-run-action@d013777c8bc3ac5ce480c003f0f9db0206629bd3
+        uses: testifysec/witness-run-action@main
         with:
           version: ${{ inputs.version }}
           archivista-server: ${{ inputs.archivista-server }}
-          archivista-headers: ${{ inputs.archivista-headers }}
+          archivista-headers: "Authorization: Token ${{ secrets.archivista-headers-token }}"
           workingdir: ${{ inputs.workingdir }}
           step: ${{ inputs.step }}
           attestations: ${{ inputs.attestations }}
