@@ -104,7 +104,7 @@ async function run() {
     fulcio = fulcio || "https://fulcio.sigstore.dev";
     fulcioOidcClientId = fulcioOidcClientId || "sigstore";
     fulcioOidcIssuer = fulcioOidcIssuer || "https://oauth2.sigstore.dev/auth";
-    timestampServers = "https://freetsa.org/tsr " + timestampServers;
+    timestampServers = timestampServers || "https://freetsa.org/tsr";
   }
 
   if (attestations.length) {
