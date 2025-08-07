@@ -20,7 +20,7 @@ on:
         type: boolean
       version:
         required: false
-        default: "0.9.2"
+        default: '0.9.2'
         type: string
       artifact-download:
         required: false
@@ -35,7 +35,7 @@ on:
         required: false
         type: string
       pre-command-attestations:
-        default: "environment git github"
+        default: 'environment git github'
         required: false
         type: string
       command:
@@ -48,7 +48,7 @@ on:
         required: true
         type: string
       archivista-server:
-        default: "https://archivista.testifysec.io"
+        default: 'https://archivista.testifysec.io'
         required: false
         type: string
       workingdir:
@@ -78,7 +78,7 @@ jobs:
         with:
           version: ${{ inputs.version }}
           archivista-server: ${{ inputs.archivista-server }}
-          archivista-headers: "Authorization: Token ${{ secrets.archivista-headers-token }}"
+          archivista-headers: 'Authorization: Token ${{ secrets.archivista-headers-token }}'
           workingdir: ${{ inputs.workingdir }}
           step: pre-${{ inputs.step }}
           attestations: ${{ inputs.pre-command-attestations }}
@@ -92,7 +92,7 @@ jobs:
         with:
           version: ${{ inputs.version }}
           archivista-server: ${{ inputs.archivista-server }}
-          archivista-headers: "Authorization: Token ${{ secrets.archivista-headers-token }}"
+          archivista-headers: 'Authorization: Token ${{ secrets.archivista-headers-token }}'
           workingdir: ${{ inputs.workingdir }}
           step: ${{ inputs.step }}
           attestations: ${{ inputs.attestations }}
