@@ -16,7 +16,13 @@ on:
   workflow_call:
     inputs:
       pull_request:
-        required: true
+        description: 'DEPRECATED: Use use-witness instead.'
+        required: false
+        type: boolean
+      use-witness:
+        description: 'Whether to use witness for attestation (default: true)'
+        required: false
+        default: true
         type: boolean
       version:
         required: false
@@ -73,7 +79,13 @@ jobs:
           name: ${{ inputs.artifact-download }}
           path: /tmp
 
-      - if: ${{ inputs.pre-command != '' && inputs.pull_request == false }}
+      - if: >-
+          ${{
+            inputs.pre-command != '' && (
+              (inputs.pull_request != null && inputs.pull_request == false) ||
+              (inputs.pull_request == null && inputs.use-witness == true)
+            )
+          }}
         uses: testifysec/witness-run-action@main
         with:
           version: ${{ inputs.version }}
@@ -83,11 +95,21 @@ jobs:
           step: pre-${{ inputs.step }}
           attestations: ${{ inputs.pre-command-attestations }}
           command: /bin/sh -c "${{ inputs.pre-command }}"
-      - if: ${{ inputs.pre-command != '' && inputs.pull_request == true }}
+      - if: >-
+          ${{
+            inputs.pre-command != '' && (
+              (inputs.pull_request != null && inputs.pull_request == true) ||
+              (inputs.pull_request == null && inputs.use-witness == false)
+            )
+          }}
         run: ${{ inputs.pre-command }}
         working-directory: ${{ inputs.workingdir }}
 
-      - if: ${{ inputs.pull_request == false }}
+      - if: >-
+          ${{
+            (inputs.pull_request != null && inputs.pull_request == false) ||
+            (inputs.pull_request == null && inputs.use-witness == true)
+          }}
         uses: testifysec/witness-run-action@main
         with:
           version: ${{ inputs.version }}
@@ -97,7 +119,11 @@ jobs:
           step: ${{ inputs.step }}
           attestations: ${{ inputs.attestations }}
           command: /bin/sh -c "${{ inputs.command }}"
-      - if: ${{ inputs.pull_request == true }}
+      - if: >-
+          ${{
+            (inputs.pull_request != null && inputs.pull_request == true) ||
+            (inputs.pull_request == null && inputs.use-witness == false)
+          }}
         run: ${{ inputs.command }}
         working-directory: ${{ inputs.workingdir }}
 
