@@ -30195,6 +30195,8 @@ async function run() {
   const trace = core.getInput("trace");
   const enableSigstore = core.getInput("enable-sigstore") === "true";
   const command = core.getInput("command");
+  const envVars = core.getInput("env");
+  const secrets = core.getInput("secrets");
 
   const exportLink = core.getInput("attestor-link-export") === "true";
   const exportSBOM = core.getInput("attestor-sbom-export") === "true";
@@ -30274,6 +30276,38 @@ async function run() {
 
   index_process.chdir(fullWorkspacePath);
 
+  // Parse and prepare custom environment variables
+  const customEnv = { ...index_process.env };
+  
+  // Helper function to parse key=value pairs
+  function parseKeyValuePairs(input, isSecret = false) {
+    if (!input) return;
+    
+    const lines = input.split(/\r?\n/);
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      if (trimmedLine && trimmedLine.includes('=')) {
+        const equalIndex = trimmedLine.indexOf('=');
+        const key = trimmedLine.substring(0, equalIndex).trim();
+        const value = trimmedLine.substring(equalIndex + 1);
+        if (key) {
+          customEnv[key] = value;
+          if (isSecret) {
+            core.info(`Setting secret environment variable: ${key}`);
+          } else {
+            core.info(`Setting environment variable: ${key}`);
+          }
+        }
+      }
+    }
+  }
+  
+  // Parse env input
+  parseKeyValuePairs(envVars, false);
+  
+  // Parse secrets input
+  parseKeyValuePairs(secrets, true);
+
   const commandArray = command.match(/(?:[^\s"]+|"[^"]*")+/g);
 
   // Execute the command and capture its output
@@ -30283,7 +30317,7 @@ async function run() {
   let output = "";
   await exec.exec("sh", ["-c", commandString], {
     cwd: index_process.cwd(),
-    env: index_process.env,
+    env: customEnv,
     listeners: {
       stdout: (data) => {
         output += data.toString();

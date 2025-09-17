@@ -92,6 +92,14 @@ inputs:
   workingdir:
     description: "Directory from which commands will run"
     required: false
+  env:
+    description: "Environment variables to set during command execution. Expected format: KEY=value, one per line. Use this to pass secrets or other environment variables to your command."
+    required: false
+    default: ""
+  secrets:
+    description: "Secrets to make available as environment variables during command execution. Expected format: SECRET_NAME=secret_value, one per line. Alternative to env for passing sensitive data."
+    required: false
+    default: ""
 
 runs:
   using: "node20"

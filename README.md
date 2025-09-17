@@ -36,6 +36,42 @@ jobs:
           command: make build
 ```
 
+### Using with Docker Buildx and Secrets
+
+When using Docker buildx with secrets (e.g., `--secret id=MYSECRET`), you need to make those secrets available as environment variables. Here are two approaches:
+
+#### Approach 1: Using env input
+
+```yaml
+- name: Witness Run with Docker Buildx
+  uses: testifysec/witness-run-action@v1
+  with:
+    step: build
+    command: 'docker buildx build --secret id=REGISTRY_TOKEN --secret id=API_KEY .'
+    env: |
+      REGISTRY_TOKEN=${{ secrets.REGISTRY_TOKEN }}
+      API_KEY=${{ secrets.API_KEY }}
+```
+
+#### Approach 2: Using secrets input
+
+```yaml
+- name: Witness Run with Docker Buildx
+  uses: testifysec/witness-run-action@v1
+  with:
+    step: build
+    command: 'docker buildx build --secret id=REGISTRY_TOKEN .'
+    secrets: |
+      REGISTRY_TOKEN=${{ secrets.REGISTRY_TOKEN }}
+```
+
+### Security Notes for Secrets
+
+- **Environment Variables vs Secrets Input**: Both `env` and `secrets` inputs work the same way internally, but `secrets` is provided as a semantic distinction for sensitive data
+- **Secret Masking**: GitHub Actions automatically masks secret values in logs, but be careful not to echo or print environment variables that contain secrets
+- **Docker Buildx Secrets**: When using Docker buildx `--secret` flag, the secret is automatically mounted securely and doesn't appear in the image layers
+- **Prefer Docker Secrets**: For Docker builds, prefer using `--secret id=MYSECRET` over `--build-arg MYSECRET=value` as secrets don't persist in the final image
+
 ## Using Reusable Workflows
 
 For a streamlined setup, you can use our reusable workflow. This is especially useful when you need to pass secrets like API tokens for authentication:
@@ -135,3 +171,5 @@ host your own instances.
 | timestamp-servers        | Timestamp Authority Servers to use when signing envelope, space-separated                           | No       |                                       |
 | trace                    | Enable tracing for the command                                                                       | No       | false                                 |
 | workingdir               | Directory from which commands will run                                                               | No       |                                       |
+| env                      | Environment variables to set during command execution. Expected format: KEY=value, one per line. Use this to pass secrets or other environment variables to your command. | No       |                                       |
+| secrets                  | Secrets to make available as environment variables during command execution. Expected format: SECRET_NAME=secret_value, one per line. Alternative to env-vars for passing sensitive data. | No       |                                       |
