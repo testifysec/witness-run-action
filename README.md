@@ -10,7 +10,7 @@ Archivista for attestation storage and distibution.
 
 To use this action, include it in your GitHub workflow YAML file.
 
-### Example
+### Example: Default Sigstore Signing
 
 ```yaml
 permissions:
@@ -34,6 +34,31 @@ jobs:
           enable-archivista: false
           enable-sigstore: false
           command: make build
+```
+
+### Example: File-based Signing
+
+```yaml
+name: Example with File-based Signing
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v0.1.3
+
+      - name: Witness Run with File-based Signing
+        uses: testifysec/witness-run-action@v1
+        with:
+          step: build
+          command: make build
+          attestations: "environment git github"
+          signer-file-key-path: path/to/private-key.pem
+          signer-file-cert-path: path/to/certificate.pem  # optional
+          enable-sigstore: true  # This will be ignored when file-based signing is configured
+          enable-archivista: false
 ```
 
 ## Using Reusable Workflows
@@ -76,6 +101,11 @@ Sigstore is an open-source platform for securely signing software artifacts. Whe
 the `enable-sigstore` flag is set to true, this action will use Sigstore for signing
 the attestation. This creates a publicly verifiable record of the attestation on
 the Sigstore public instance, sigstore.dev
+
+**Note:** When file-based signing is configured using `signer-file-key-path` or `key`, 
+the action will automatically disable Sigstore/Fulcio signing and use the provided 
+private key for signing instead. This allows for local signing without requiring 
+OIDC tokens or internet connectivity to Sigstore services.
 
 ### Archivista
 
@@ -120,13 +150,15 @@ host your own instances.
 | archivista-headers       | Headers to include when making requests to Archivista. Input is expected to be new line separated list of headers | No |  |
 | archivista-server        | URL of the Archivista server to store or retrieve attestations                                       | No       | <https://archivista.testifysec.io>      |
 | attestations             | Attestations to record, space-separated                                                              | No       | environment git github                      |
-| certificate              | Path to the signing key's certificate                                                                | No       |                                       |
+| certificate              | Path to the signing key's certificate (legacy, use signer-file-cert-path for file-based signing)   | No       |                                       |
+| signer-file-cert-path    | Path to the file containing the certificate for the private key (file-based signing)               | No       |                                       |
+| signer-file-key-path     | Path to the file containing the private key for file-based signing                                  | No       |                                       |
 | fulcio                   | Fulcio address to sign with                                                                          | No       |                                       |
 | fulcio-oidc-client-id    | OIDC client ID to use for authentication                                                             | No       |                                       |
 | fulcio-oidc-issuer       | OIDC issuer to use for authentication                                                                | No       |                                       |
 | fulcio-token             | Raw token to use for authentication                                                                  | No       |                                       |
 | intermediates            | Intermediates that link trust back to a root of trust in the policy, space-separated                | No       |                                       |
-| key                      | Path to the signing key                                                                              | No       |                                       |
+| key                      | Path to the signing key (legacy, use signer-file-key-path for file-based signing)                  | No       |                                       |
 | outfile                  | File to which to write signed data. Defaults to stdout                                               | No       |                                       |
 | product-exclude-glob     | Pattern to use when recording products. Files that match this pattern will be excluded as subjects on the attestation. | No       |                                       |
 | product-include-glob     | Pattern to use when recording products. Files that match this pattern will be included as subjects on the attestation. | No       | *                                     |
