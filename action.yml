@@ -41,6 +41,9 @@ inputs:
   certificate:
     description: "Path to the signing key's certificate"
     required: false
+  signer-file-cert-path:
+    description: "Path to the file containing the certificate for the private key (file-based signing)"
+    required: false
   enable-archivista:
     description: "Use Archivista to store or retrieve attestations"
     required: false
@@ -62,6 +65,9 @@ inputs:
     required: false
   key:
     description: "Path to the signing key"
+    required: false
+  signer-file-key-path:
+    description: "Path to the file containing the private key for file-based signing"
     required: false
   outfile:
     description: "File to which to write signed data. Defaults to stdout"

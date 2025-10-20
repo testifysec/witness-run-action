@@ -1,0 +1,63 @@
+name: Test File-based Signing
+on:
+  push:
+    branches:
+      - "*"
+  pull_request:
+    branches:
+      - "*"
+
+jobs:
+  test-file-based-signing:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Generate test key for file-based signing
+        run: |
+          # Create a dummy key file for testing
+          echo "-----BEGIN PRIVATE KEY-----" > test-key.pem
+          echo "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7VJTUt9Us8cKB" >> test-key.pem
+          echo "-----END PRIVATE KEY-----" >> test-key.pem
+
+      - name: Test action with file-based signing (should not require OIDC)
+        uses: ./ # Use local action
+        env:
+          # Explicitly unset OIDC variables to simulate the issue scenario
+          ACTIONS_ID_TOKEN_REQUEST_URL: ""
+          ACTIONS_ID_TOKEN_REQUEST_TOKEN: ""
+        with:
+          step: test-file-signing
+          command: echo "Testing file-based signing"
+          attestations: "environment git"
+          signer-file-key-path: test-key.pem
+          enable-sigstore: true  # This should be ignored when file-based signing is configured
+          enable-archivista: false  # Disable to avoid external dependencies
+          version: 0.9.2
+
+      - name: Test action with default Sigstore (should work in GitHub Actions)
+        uses: ./ # Use local action
+        with:
+          step: test-sigstore
+          command: echo "Testing default Sigstore"
+          attestations: "environment git github"
+          enable-sigstore: true
+          enable-archivista: false  # Disable to avoid external dependencies  
+          version: 0.9.2
+        # This test relies on GitHub Actions providing OIDC tokens automatically
+
+      - name: Test legacy key parameter (backward compatibility)
+        uses: ./ # Use local action
+        env:
+          # Explicitly unset OIDC variables to simulate the issue scenario
+          ACTIONS_ID_TOKEN_REQUEST_URL: ""
+          ACTIONS_ID_TOKEN_REQUEST_TOKEN: ""
+        with:
+          step: test-legacy-key
+          command: echo "Testing legacy key parameter"
+          attestations: "environment git"
+          key: test-key.pem  # Using the legacy 'key' parameter
+          enable-sigstore: true  # This should be ignored when file-based signing is configured
+          enable-archivista: false  # Disable to avoid external dependencies
+          version: 0.9.2

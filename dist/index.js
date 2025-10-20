@@ -30176,6 +30176,7 @@ async function run() {
   const archivistaHeaders = core.getInput("archivista-headers");
   const attestations = core.getInput("attestations").split(" ");
   const certificate = core.getInput("certificate");
+  const signerFileCertPath = core.getInput("signer-file-cert-path");
   const enableArchivista = core.getInput("enable-archivista") === "true";
   let fulcio = core.getInput("fulcio");
   let fulcioOidcClientId = core.getInput("fulcio-oidc-client-id");
@@ -30183,6 +30184,7 @@ async function run() {
   const fulcioToken = core.getInput("fulcio-token");
   const intermediates = core.getInput("intermediates").split(" ");
   const key = core.getInput("key");
+  const signerFileKeyPath = core.getInput("signer-file-key-path");
   let outfile = core.getInput("outfile");
   outfile = outfile
     ? outfile
@@ -30203,7 +30205,10 @@ async function run() {
 
   const cmd = ["run"];
 
-  if (enableSigstore) {
+  // Check if file-based signing is configured
+  const isFileBasedSigning = key || signerFileKeyPath || signerFileCertPath;
+
+  if (enableSigstore && !isFileBasedSigning) {
     fulcio = fulcio || "https://fulcio.sigstore.dev";
     fulcioOidcClientId = fulcioOidcClientId || "sigstore";
     fulcioOidcIssuer = fulcioOidcIssuer || "https://oauth2.sigstore.dev/auth";
@@ -30226,6 +30231,7 @@ async function run() {
   if (mavenPOM) cmd.push(`--attestor-maven-pom-path=${mavenPOM}`);
 
   if (certificate) cmd.push(`--certificate=${certificate}`);
+  if (signerFileCertPath) cmd.push(`--signer-file-cert-path=${signerFileCertPath}`);
   if (enableArchivista) cmd.push(`--enable-archivista=${enableArchivista}`);
   if (archivistaServer) cmd.push(`--archivista-server=${archivistaServer}`);
   if (archivistaHeaders) {
@@ -30250,6 +30256,7 @@ async function run() {
   }
 
   if (key) cmd.push(`--key=${key}`);
+  if (signerFileKeyPath) cmd.push(`--signer-file-key-path=${signerFileKeyPath}`);
   if (productExcludeGlob) cmd.push(`--attestor-product-exclude-glob=${productExcludeGlob}`);
   if (productIncludeGlob) cmd.push(`--attestor-product-include-glob=${productIncludeGlob}`);
   if (spiffeSocket) cmd.push(`--spiffe-socket=${spiffeSocket}`);
