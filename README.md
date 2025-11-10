@@ -36,6 +36,22 @@ jobs:
           command: make build
 ```
 
+### Configuring Retry Behavior
+
+By default, the action will retry failed commands up to 2 times with a 5-second initial delay and exponential backoff. You can customize this behavior:
+
+```yaml
+- name: Witness Run with Custom Retries
+  uses: testifysec/witness-run-action@v1
+  with:
+    step: build
+    command: npm ci
+    retries: 3              # Retry up to 3 times (4 total attempts)
+    retry-delay: 10         # Start with 10-second delay (10s → 20s → 40s)
+```
+
+This is particularly useful for handling transient network failures when connecting to package registries or external services.
+
 ## Using Reusable Workflows
 
 For a streamlined setup, you can use our reusable workflow. This is especially useful when you need to pass secrets like API tokens for authentication:
@@ -135,3 +151,5 @@ host your own instances.
 | timestamp-servers        | Timestamp Authority Servers to use when signing envelope, space-separated                           | No       |                                       |
 | trace                    | Enable tracing for the command                                                                       | No       | false                                 |
 | workingdir               | Directory from which commands will run                                                               | No       |                                       |
+| retries                  | Maximum number of retry attempts for transient failures                                              | No       | 2                                     |
+| retry-delay              | Initial delay in seconds between retry attempts (uses exponential backoff)                           | No       | 5                                     |

@@ -92,6 +92,14 @@ inputs:
   workingdir:
     description: "Directory from which commands will run"
     required: false
+  retries:
+    description: "Maximum number of retry attempts for transient failures"
+    required: false
+    default: "2"
+  retry-delay:
+    description: "Initial delay in seconds between retry attempts (uses exponential backoff)"
+    required: false
+    default: "5"
 
 runs:
   using: "node20"
