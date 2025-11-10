@@ -64,6 +64,33 @@ jobs:
 
 > **Important:** When using reusable workflows, secrets must be passed using the `secrets` keyword, not the `with` keyword. This ensures proper security handling of sensitive values like API tokens. Pass your API token as `archivista-headers-token` and the workflow will format it correctly as an authorization header.
 
+### Conditional Attestation with `use-witness`
+
+The reusable workflow supports the `use-witness` parameter, which allows you to conditionally enable or disable witness attestation. This is useful as an escape valve for non-transient errors (e.g., when public Fulcio is down) or to quickly disable witness without a pull request to unblock pipelines.
+
+```yaml
+jobs:
+  build:
+    uses: testifysec/witness-run-action/.github/workflows/witness.yml@main
+    with:
+      # Use a repository variable to control witness attestation
+      # Set WITNESS_ENABLED to 'false' in repository settings to disable
+      use-witness: ${{ vars.WITNESS_ENABLED != 'false' }}
+      step: build
+      attestations: "git github environment"
+      command: make build
+    secrets:
+      archivista-headers-token: ${{ secrets.WITNESS_API_TOKEN }}
+```
+
+**Emergency Disable Instructions:**
+1. Go to your repository Settings → Secrets and variables → Actions → Variables
+2. Create a variable named `WITNESS_ENABLED` and set it to `false`
+3. All workflow runs will skip witness attestation immediately
+4. Once the issue is resolved, change the value back to `true` or remove the variable
+
+For more examples and patterns, see the [examples directory](./examples/).
+
 ## Using Sigstore and Archivista Flags
 
 This action supports the use of Sigstore and Archivista for creating attestations.
