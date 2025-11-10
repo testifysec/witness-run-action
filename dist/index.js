@@ -30115,6 +30115,10 @@ async function run() {
   const workingdir = core.getInput("workingdir");
   const fullWorkspacePath = path.join(index_process.env.GITHUB_WORKSPACE, workingdir);
   const witnessInstallDir = core.getInput('witness-install-dir') || fullWorkspacePath;
+  
+  // Retry configuration
+  const maxRetries = parseInt(core.getInput("retries") || "2", 10);
+  const retryDelay = parseInt(core.getInput("retry-delay") || "5", 10);
 
   // Download Witness
   const version = core.getInput("version");
@@ -30281,18 +30285,25 @@ async function run() {
     commandString = runArray.join(" ");
 
   let output = "";
-  await exec.exec("sh", ["-c", commandString], {
-    cwd: index_process.cwd(),
-    env: index_process.env,
-    listeners: {
-      stdout: (data) => {
-        output += data.toString();
-      },
-      stderr: (data) => {
-        output += data.toString();
-      },
+  await executeWithRetry(
+    async () => {
+      output = "";
+      await exec.exec("sh", ["-c", commandString], {
+        cwd: index_process.cwd(),
+        env: index_process.env,
+        listeners: {
+          stdout: (data) => {
+            output += data.toString();
+          },
+          stderr: (data) => {
+            output += data.toString();
+          },
+        },
+      });
     },
-  });
+    maxRetries,
+    retryDelay
+  );
 
   // Find the GitOID from the output
   const gitOIDs = extractDesiredGitOIDs(output);
@@ -30333,6 +30344,34 @@ async function run() {
     fs.appendFileSync(index_process.env.GITHUB_STEP_SUMMARY, tableRow);
   }
   exit(0);
+}
+
+async function executeWithRetry(fn, maxRetries, retryDelay) {
+  let lastError;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      await fn();
+      return; // Success, exit the retry loop
+    } catch (error) {
+      lastError = error;
+      
+      if (attempt < maxRetries) {
+        const delay = retryDelay * Math.pow(2, attempt); // Exponential backoff
+        core.warning(`Command failed (attempt ${attempt + 1}/${maxRetries + 1}). Retrying in ${delay} seconds...`);
+        core.warning(`Error: ${error.message}`);
+        await sleep(delay * 1000);
+      }
+    }
+  }
+  
+  // If we've exhausted all retries, throw the last error
+  core.error(`Command failed after ${maxRetries + 1} attempts`);
+  throw lastError;
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 function extractDesiredGitOIDs(output) {

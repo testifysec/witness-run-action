@@ -135,3 +135,5 @@ host your own instances.
 | timestamp-servers        | Timestamp Authority Servers to use when signing envelope, space-separated                           | No       |                                       |
 | trace                    | Enable tracing for the command                                                                       | No       | false                                 |
 | workingdir               | Directory from which commands will run                                                               | No       |                                       |
+| retries                  | Maximum number of retry attempts for transient failures                                              | No       | 2                                     |
+| retry-delay              | Initial delay in seconds between retry attempts (uses exponential backoff)                           | No       | 5                                     |
