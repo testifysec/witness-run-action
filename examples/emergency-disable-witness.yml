@@ -1,0 +1,49 @@
+# Example: Emergency Disable Witness
+#
+# This example shows a pattern for quickly disabling witness attestation
+# during emergencies (e.g., service outages) without requiring a code change.
+#
+# Setup:
+# 1. Create a repository variable "WITNESS_ENABLED" (default: true)
+# 2. During an emergency, change "WITNESS_ENABLED" to "false" in repository settings
+# 3. Existing and new workflow runs will skip witness attestation
+# 4. Once the issue is resolved, change back to "true"
+#
+# This approach allows you to unblock pipelines immediately without waiting
+# for a pull request to be reviewed and merged.
+
+name: Emergency Disable Example
+on: [push, pull_request]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build:
+    uses: testifysec/witness-run-action/.github/workflows/witness.yml@main
+    with:
+      # Emergency escape valve: Set WITNESS_ENABLED to 'false' to disable
+      # If not set or set to any value other than 'false', witness is enabled
+      use-witness: ${{ vars.WITNESS_ENABLED != 'false' }}
+      step: build
+      attestations: "git github environment"
+      command: |
+        npm run build
+        npm run test
+    secrets:
+      archivista-headers-token: ${{ secrets.WITNESS_API_TOKEN }}
+
+  deploy:
+    needs: build
+    uses: testifysec/witness-run-action/.github/workflows/witness.yml@main
+    with:
+      # The same variable controls all witness steps
+      use-witness: ${{ vars.WITNESS_ENABLED != 'false' }}
+      step: deploy
+      attestations: "git github environment"
+      command: |
+        echo "Deploying application..."
+        kubectl apply -f deployment.yaml
+    secrets:
+      archivista-headers-token: ${{ secrets.WITNESS_API_TOKEN }}

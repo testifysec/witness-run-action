@@ -1,0 +1,34 @@
+# Example: Using use-witness with Environment Variable
+#
+# This example shows how to conditionally enable/disable witness attestation
+# using an environment variable. This is useful as an escape valve for 
+# non-transient errors (e.g., when public Fulcio is down).
+#
+# Setup:
+# 1. Go to your repository Settings > Secrets and variables > Actions > Variables
+# 2. Create a new repository variable named "USE_WITNESS" with value "true" or "false"
+# 3. To quickly disable witness attestation during an outage, change the value to "false"
+#    without needing a pull request
+
+name: Build with Conditional Witness
+on: [push, pull_request]
+
+permissions:
+  id-token: write # Required for requesting the JWT
+  contents: read  # Required for actions/checkout
+
+jobs:
+  build:
+    uses: testifysec/witness-run-action/.github/workflows/witness.yml@main
+    with:
+      # Use the USE_WITNESS variable to control witness attestation
+      # Default to true if not set
+      use-witness: ${{ vars.USE_WITNESS == 'true' || vars.USE_WITNESS == '' }}
+      step: build
+      attestations: "git github environment"
+      archivista-server: "https://archivista.testifysec.io"
+      command: |
+        echo "Building application..."
+        make build
+    secrets:
+      archivista-headers-token: ${{ secrets.WITNESS_API_TOKEN }}

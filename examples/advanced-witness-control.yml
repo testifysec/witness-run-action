@@ -1,0 +1,61 @@
+# Example: Multiple Strategies for Controlling Witness
+#
+# This example demonstrates different strategies for controlling witness
+# attestation based on various conditions.
+
+name: Advanced Witness Control
+on: [push, pull_request]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  # Strategy 1: Use environment variable (recommended)
+  build-with-env-var:
+    uses: testifysec/witness-run-action/.github/workflows/witness.yml@main
+    with:
+      use-witness: ${{ vars.USE_WITNESS != 'false' }}
+      step: build
+      attestations: "git github environment"
+      command: npm run build
+    secrets:
+      archivista-headers-token: ${{ secrets.WITNESS_API_TOKEN }}
+
+  # Strategy 2: Disable for pull requests from forks
+  # (where secrets might not be available)
+  build-main-only:
+    uses: testifysec/witness-run-action/.github/workflows/witness.yml@main
+    with:
+      use-witness: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+      step: build
+      attestations: "git github environment"
+      command: npm run build
+    secrets:
+      archivista-headers-token: ${{ secrets.WITNESS_API_TOKEN }}
+
+  # Strategy 3: Only enable for main branch and tags
+  build-protected-refs:
+    uses: testifysec/witness-run-action/.github/workflows/witness.yml@main
+    with:
+      use-witness: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') }}
+      step: build
+      attestations: "git github environment"
+      command: npm run build
+    secrets:
+      archivista-headers-token: ${{ secrets.WITNESS_API_TOKEN }}
+
+  # Strategy 4: Combine multiple conditions with environment variable override
+  build-smart-control:
+    uses: testifysec/witness-run-action/.github/workflows/witness.yml@main
+    with:
+      # Enable witness when:
+      # - WITNESS_ENABLED is not explicitly set to 'false' AND
+      # - Either pushing to main branch OR creating a tag
+      # This allows emergency disable while maintaining normal controls
+      use-witness: ${{ vars.WITNESS_ENABLED != 'false' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')) }}
+      step: build
+      attestations: "git github environment"
+      command: npm run build
+    secrets:
+      archivista-headers-token: ${{ secrets.WITNESS_API_TOKEN }}
