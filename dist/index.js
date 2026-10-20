@@ -30229,9 +30229,12 @@ async function run() {
   if (enableArchivista) cmd.push(`--enable-archivista=${enableArchivista}`);
   if (archivistaServer) cmd.push(`--archivista-server=${archivistaServer}`);
   if (archivistaHeaders) {
-    const splitHeaders = archivistaHeaders.split(/\r|\n/);
+    const splitHeaders = archivistaHeaders.split(/\r?\n/);
     splitHeaders.forEach((header) => {
-      cmd.push(`--archivista-headers="${header.trim()}"`);
+      header = header.trim();
+      if (header.length > 0) {
+        cmd.push(`--archivista-headers="${header}"`);
+      }
     });
   }
 
